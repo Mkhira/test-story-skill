@@ -119,3 +119,7 @@ scripts/        deterministic helpers; each prints JSON
 - The latest additions — Arabic-first with the English choice, retest mode, smart retries and run
   clean-up — are tested offline and not yet on a live device.
 - Android support is written but has not been run yet.
+
+## License
+
+[MIT](LICENSE) © 2026 Mohamed khira
