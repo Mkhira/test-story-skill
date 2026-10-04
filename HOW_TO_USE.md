@@ -3,6 +3,29 @@
 A practical guide to the global `test-story` skill for Claude Code. Install it first (see
 [README.md](README.md)).
 
+## Quick start
+
+1. **Install once:** `git clone https://github.com/Mkhira/test-story-skill.git ~/.claude/skills/test-story`,
+   `pip3 install pillow`, restart Claude Code (details in [README.md](README.md)).
+2. **Optional, recommended:** give the project a run skill ([Set up a new project](#set-up-a-new-project)).
+3. **Run:** `/test-story <story file or pasted text> <feature folder or name>`.
+4. **Answer the questions:** test data, testIDs (say yes), risky cases, spec gaps, the run
+   languages (primary first), then approve. You never edit `test-cases.md` by hand.
+5. **Wait:** it checks the installed build, asks for a login if the feature needs one, runs the
+   primary language, then asks about the other languages (multilingual apps only).
+6. **Read the report:** `test-report-<runId>.md` next to the test cases — verdict, classified
+   findings, screenshots with a red box, API calls, code locations, fix options.
+7. **Commit** `test-cases.md`, the report and `e2e/` (the skill never commits). After the fixes,
+   say `retest <feature>`: only the failed pairs run again.
+
+| You want to | Type |
+| --- | --- |
+| Test a story the first time | `/test-story docs/stories/CHECKOUT-001.md checkout` |
+| Retest what failed | `/test-story retest checkout` or just "retest checkout" |
+| Run the whole story again | the first-run command again (approved cases are reused) |
+| Continue a stopped run | the same command again |
+| Skip the "other languages?" question | add `— other languages: message checks only` (or `all cases` / `skip`) |
+
 ## Before the first run
 
 1. Install the project's dependencies, e.g. `npm ci` (and `cd ios && pod install` for iOS).
@@ -162,6 +185,44 @@ git-ignored; the skill adds these entries to `.gitignore` before writing:
 test-runs/
 test-data.local.json
 ```
+
+## Set up a new project
+
+The skill works without project setup: it reads the code and asks what it cannot find. A small
+**project run skill** makes it faster and more accurate, and the skill offers to add every fact it
+had to look up. Create `.claude/skills/run-<app>/SKILL.md` in the project:
+
+```markdown
+---
+name: run-myapp
+description: How to build, launch, drive and stop MyApp on the iOS simulator / Android emulator. Used by test-story.
+---
+
+# Running MyApp
+
+| Fact | Value |
+|---|---|
+| Bundle id | iOS `com.example.myapp` · Android `com.example.myapp` |
+| Start Metro | `npx expo start` |
+| Build | `npx expo run:ios` / `npx expo run:android` |
+
+## App facts for test-story
+
+| test-story asks for | MyApp |
+|---|---|
+| Languages | `en, ar` — primary first |
+| Language switch | Settings → Language; text switches live / after a restart; RTL after a cold launch |
+| Path to a feature | `myapp://route/<id>`, ids in `src/navigation/linking.ts` |
+| App translations | `src/i18n/{en,ar}.json` |
+| CMS / server messages | where the local defaults live and which endpoint overrides them |
+| Backend language | header the backend reads (usually `Accept-Language`) |
+| Error dialog (`appError`) | `Something went wrong\|<translated title>` |
+| Network log format | only if API calls are not logged as `[HttpClient] → <METHOD> <url>` / `← <status> <path>` |
+| Environment | env files, and the startup log line with the API base URL (mask secrets) |
+| Logged-in marker | a label only a logged-in user sees, e.g. `^(Profile\|<translated>)$` |
+```
+
+Fill what you know; leave the rest out. The facts stay in your repo, never in the global skill.
 
 ## Tips
 

@@ -115,8 +115,11 @@ flows with your project's Prettier when the project has one, so CI format checks
 
 If your project has its own skill that explains how to build and launch the app (for example
 `.claude/skills/run-myapp/`), `test-story` reads it and follows it for booting, building, deep
-links and the language switch. Without one it uses its own scripts (`npx expo run:ios` /
-`run:android`).
+links, the language switch and the other app facts it needs (languages, message sources, error
+dialog, API log format, environment, logged-in marker). Without one it uses its own scripts
+(`npx expo run:ios` / `run:android`) and asks. A template is in
+[HOW_TO_USE.md → Set up a new project](HOW_TO_USE.md#set-up-a-new-project); the quick start is at
+the top of that file.
 
 ## Repository layout
 
