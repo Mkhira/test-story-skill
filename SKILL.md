@@ -1,6 +1,6 @@
 ---
 name: test-story
-description: "Turn one user story and one React Native (Expo) feature into approved end-to-end test cases, run them with Maestro on an iOS simulator or Android emulator in English and Arabic, and write a bug-and-gap report into the feature folder. Use when the user runs /test-story, or asks to test a user story / feature end to end on a simulator or emulator, generate test cases from a story, or produce a QA report for a feature. Also use when the user says 'retest', 're-test', 'test again after the fix' or 'run the failed cases again' for a story or feature that was already tested: retest mode re-runs only the failed cases."
+description: "Turn one user story and one React Native (Expo) feature into approved end-to-end test cases, run them with Maestro on an iOS simulator or Android emulator in each of the app's languages (e.g. English and Arabic), and write a bug-and-gap report into the feature folder. Use when the user runs /test-story, or asks to test a user story / feature end to end on a simulator or emulator, generate test cases from a story, or produce a QA report for a feature. Also use when the user says 'retest', 're-test', 'test again after the fix' or 'run the failed cases again' for a story or feature that was already tested: retest mode re-runs only the failed cases."
 user-invocable: true
 argument-hint: "<story path or pasted text> <feature path or name> | retest <story folder or feature>"
 ---
@@ -8,15 +8,22 @@ argument-hint: "<story path or pasted text> <feature path or name> | retest <sto
 # test-story
 
 `/test-story <story> <feature>` → `<feature>/test-stories/<story-slug>/test-cases.md` (approval file)
-→ after approval: Maestro runs Arabic on one device, then asks whether to run English (all /
-message checks only / skip) → `test-report-<runId>.md` in the same folder.
+→ after approval: Maestro runs the primary language on one device, then (multilingual apps) asks
+whether to run the other languages (all / message checks only / skip) →
+`test-report-<runId>.md` in the same folder.
+
+**Languages** are a list, primary first: run-info `languages` and the `- Languages:` line of
+`test-cases.md` (e.g. `ar, en` or just `en`). Phase 2 finds the app's languages and proposes the
+primary one (the language most users use, else the app's default; the project run skill may name
+it); the user confirms it at approval. One language → no language switch, no second-language
+question, one result column. Below, "primary" and "the other languages" follow that list.
 
 `/test-story retest <story folder | feature>` (or the user says "retest") → **Retest mode** below:
 only the case × language pairs that failed in the latest run are run again.
 
 Build status: all phases are live and validated on a real feature (a bilingual sign-up flow, iOS,
 en + ar): full run (M6, 2026-10-01), then M7 live in two retests (2026-10-01, 2026-10-04):
-Arabic first, EXPECT checks not retried, retest scope, run clean-up. M8 (2026-10-04: failKind
+primary language (ar) first, EXPECT checks not retried, retest scope, run clean-up. M8 (2026-10-04: failKind
 `app`, fail fast on a shared blocking step, "blocked" pairs in the report, flows committed)
 is verified offline against the 2026-10-04 run's data (its report was built live with the
 blocked rows). M9 (2026-10-05: flow lint, deep smoke, subflow-grouped order, INCOMPLETE verdict,
@@ -24,7 +31,9 @@ local test data, masked metro.log) is verified offline. M10 (2026-10-05: build c
 the native fingerprint, `verified` only for verifier-seen findings, documented `steps`) is
 verified offline on the 2026-10-04 run's data and the live device record. M11 (2026-10-05:
 "Code tested" and skill version in the report, skill-change guard exit 7, `run_app.sh --stop`)
-is verified offline plus a live `--stop`. Not yet run on Android.
+is verified offline plus a live `--stop`. M12 (2026-10-05: configurable `languages`, primary
+first; one-language apps) is verified offline: older runs rebuild byte-identical, an
+English-only report has one column. Not yet run on Android.
 
 Scripts live in `scripts/` next to this file (`S=~/.claude/skills/test-story/scripts`). Run them
 from the project root; each prints JSON.
@@ -75,7 +84,8 @@ When the user says "retest" (after fixes), run ONLY what failed last time:
    first; a failed case the user set to `skip` is dropped.
 4. New run id; run-info gets `retestOf: <latest runId>` and `scope: [{case, lang}, …]`.
 5. Phases 0, 4–6 and 8 as usual (Phase 7 Figma is skipped: run-info `figma` = `"not run: retest"`), limited to the scope: `run_suite.py --cases` per language gets only that
-   language's failed cases, Arabic first; no English question (the scope already decides).
+   language's failed cases, primary language first; no language question (the scope already
+   decides). `languages` comes from the latest run's run-info.
    Pairs skipped by the user last time are not failures, so they are not retested. Triage only
    what still fails; carry over the previous finding (same id, new evidence) when the failure is
    the same.
@@ -146,11 +156,13 @@ Read-only. No device.
    the global `en.json` / `ar.json`).
 2. **Trace each AC** to file:line → `Implemented` / `Partial` / `Missing`.
 3. **Static gaps:** ACs with no code; behaviour the story never mentions; API errors with no UI
-   handling; keys in en but not ar (and the reverse); hard-coded visible strings.
+   handling; keys in one run language but not another; hard-coded visible strings.
 4. **Language switch:** find how the app changes language: where the control is, whether text
    switches live or needs a reload, whether native RTL needs a cold relaunch, whether the session
    survives. Find how the backend picks its language (usually `Accept-Language`); server texts are
-   then asserted per language. Run skill first; unknown → ask once.
+   then asserted per language. Also the **languages** the app ships (its i18n resources) and the
+   primary one → the `- Languages:` line of `test-cases.md`, primary first. Run skill first;
+   unknown → ask once. One language → no switch subflow is needed.
 5. **Path to the feature:** a deep link first (the app's scheme and the route or id that opens the
    feature, from the run skill or the linking config / deep-link map), else the tap path from
    home. Note the feature element to wait on after arrival.
@@ -159,12 +171,12 @@ Read-only. No device.
    shared component that does not forward `testID`, add a separate pass-through row for that
    component. Nothing is edited now.
 7. **Message map:** for every text a case will assert (validation, success, error), find its
-   exact en and ar wording and source: app translation key (feature `translations/en.ts` /
+   exact wording in every run language and its source: app translation key (feature `translations/en.ts` /
    `ar.ts`, global `en.json` / `ar.json`), CMS / server-message catalog key (its local default and
    the endpoint that overrides it at runtime), or server response (unknown until the run). Expected results quote these texts; never paraphrase. A
    story text that differs from the app's text is a static finding, asked as a spec gap.
-   Also note the app's generic error-dialog titles in en and ar (the translation key behind the
-   app's error popup) → run-info `appError` (a regex, e.g. `Something went wrong|<ar title>`),
+   Also note the app's generic error-dialog titles in every run language (the translation key behind the
+   app's error popup) → run-info `appError` (a regex, e.g. `Something went wrong|<other title>`),
    passed to `run_suite.py --app-error`.
 8. **Network log format:** find how the app logs API calls to the console. `net_log_extract.py`
    reads by default `[HttpClient]` lines with `→ <METHOD> <url>` / `← <status> <path>` and a
@@ -195,7 +207,8 @@ The user answers questions; the skill writes the answers into `test-cases.md`. E
 file by hand stays possible but is never required.
 
 1. Tell the user in 3–5 lines: the file path, case counts by type and mode, the active
-   environment, and that you will now ask for what is missing.
+   environment, the run languages (primary first), and that you will now ask for what is missing.
+   Phase 2 could not tell the primary language → add it to the step 3 questions.
 2. **Test data:** one AskUserQuestion per `{{fill}}` key, up to 4 per call, in the order of the
    Test data table. Question: the key's meaning and the cases that use it. Options (2–4):
    - for values that must be real (IDs, mobiles, emails, CRs, accounts): "Skip the cases that
@@ -208,8 +221,8 @@ file by hand stays possible but is never required.
      plus "Skip the cases that use it".
    Write each answer into the table's Value column; "Skip…" sets those cases to `skip` (every
    case in Used by — `flow_sync.py data` expands ranges such as "TC-09 … TC-15"); "Leave it for
-   later" keeps `{{fill}}`. A value that differs per language: two keys `KEY_AR` / `KEY_EN`; the
-   flow uses `${KEY}` and gets the run's language variant.
+   later" keeps `{{fill}}`. A value that differs per language: one key per language, `KEY_<LANG>`
+   (`KEY_AR` / `KEY_EN`); the flow uses `${KEY}` and gets the run's language variant.
 3. **Choices that change the run** (one call, ≤ 4 questions): the testIDs, cases that send real
    SMS/email or create records, any case the user may want to skip. Apply the answers to the file.
    testIDs: say in plain words that this edits feature files (a `testID` prop on the listed
@@ -224,7 +237,7 @@ file by hand stays possible but is never required.
    "approved"), "Stop here".
 6. On approval re-read the file (it is the source of truth), give new cases IDs, check every
    approved Auto case has its placeholders filled (any gap → ask again), set status `APPROVED`
-   with the date.
+   with the date. Copy the `- Languages:` line into run-info `languages` (a list, primary first).
 7. After every write to `test-cases.md`: `$S/format_md.sh <story>/test-cases.md` (the project's
    Prettier, so CI `format:check` passes when the user commits it; case hashes ignore spacing).
 
@@ -235,9 +248,9 @@ Read `references/expo-device.md` (and the project run skill, if any).
 1. **Add the approved testIDs** exactly as listed (props and approved pass-throughs only). Record
    each file:line for the report. Run the project's typecheck if it has one; a failure caused by
    these edits → fix the prop, nothing else.
-2. **Device:** `$S/device.sh <platform> "" <appId>` → `deviceId`. One device runs both
-   languages, Arabic first. (`clone_device.sh` can make a second device for a parallel English
-   run, but only when the user asks for it: on a 16 GB Mac a second idle simulator alone pushed
+2. **Device:** `$S/device.sh <platform> "" <appId>` → `deviceId`. One device runs every
+   language, primary first. (`clone_device.sh` can make a second device for a parallel run of
+   another language, but only when the user asks for it: on a 16 GB Mac a second idle simulator alone pushed
    1.4 GB into swap.)
 3. **Build check:** `$S/build_check.py <platform> <appId> <deviceId>` — does the installed build
    match this checkout's native code? `install` non-empty → ask before installing (it changes the
@@ -256,8 +269,9 @@ Read `references/expo-device.md` (and the project run skill, if any).
 6. **Network check:** after the smoke run, `grep -c "<api log tag>" metro.log` > 0, else record the
    gap "network calls not visible".
 7. **run-info.json:** add device, os, env, apiBase, maestro version, `started`,
-   testIdsAdded / passThroughs (file, line), networkLogVisible.
-8. **Smoke:** `$S/run_flow.sh <e2e>/subflows/go-to-feature.yaml ar <runDir> <deviceId> SMOKE
+   testIdsAdded / passThroughs (file, line), networkLogVisible; `languages` is there since
+   approval (re-run: from `test-cases.md`; retest: from the latest run).
+8. **Smoke:** `$S/run_flow.sh <e2e>/subflows/go-to-feature.yaml <primary> <runDir> <deviceId> SMOKE
    --no-record`. Failing → fix the subflow (hierarchy dump to see the screen) before any case.
 9. **Deep smoke:** `$S/flow_sync.py smoke <test-cases.md> <e2e>` → the shared subflows that 3+
    cases go through (e.g. the contact verification step); run each once with `run_flow.sh … --data
@@ -286,10 +300,11 @@ Read `references/maestro.md`; start case flows from `templates/flow.template.yam
    has a step labelled `EXPECT` (without it a failed check is retried and reported as blocked),
    is stamped, parses, reaches only existing subflows, and uses only `${KEY}`s from the Test data
    table. Fix what it lists (flows only, then format and stamp) before running anything.
-3. **Arabic first** — `run_suite.py` in the background (Bash `run_in_background`):
-   `$S/run_suite.py --run <runDir> --e2e <e2e> --lang ar --device <deviceId> --platform <p> --app
+3. **Primary language first** — `run_suite.py` in the background (Bash `run_in_background`):
+   `$S/run_suite.py --run <runDir> --e2e <e2e> --lang <primary> --device <deviceId> --platform <p> --app
    <appId> --cases <approved Auto ids not in cleanStateLast / darkModeLast> --data <runDir>/artifacts/data.json
-   --setup --app-error "<run-info appError>" [--login-marker "<login-screen regex>"]`. It switches
+   --setup --app-error "<run-info appError>" [--login-marker "<login-screen regex>"]` (`--setup`
+   runs `subflows/set-language-<lang>.yaml`; leave it out for a one-language app). It switches
    the language, closes other apps before every attempt, runs the cases in order, retries once only
    `flow` / `timeout` failures (a failed `EXPECT` check and an app error are deterministic), and
    skips pairs already in `results.json` (resume = start it again). It runs cases that share
@@ -305,24 +320,26 @@ Read `references/maestro.md`; start case flows from `templates/flow.template.yam
    - the app, server or test data (`failKind` `app`, an error response) → tell the user the step,
      what the app showed and the API response, and ask: "Stop and report (Recommended)", "I'll fix
      it — wait, then continue". Stop → run-info `stoppedEarly: [{lang, step, remaining}]`; the
-     blocking cause becomes one finding covering every blocked pair (Phase 6). Do not start the
-     English suite while the same step blocks Arabic: ask first.
+     blocking cause becomes one finding covering every blocked pair (Phase 6). Do not start
+     another language's suite while the same step blocks the primary one: ask first.
    Exit 7 → **the skill changed**: the test-story scripts differ from the version recorded at the
    start (another session edited the skill). Re-read this file and the references the remaining
    phases use, tell the user in one line, then start the suite again with `--accept-skill-change`
    (it records the new version and a note; resume runs only the remaining cases).
-4. **English: ask.** Show the Arabic results (case → passed / failed, one line per failure), then
-   one AskUserQuestion. Get the message-check set first: `$S/flow_sync.py messages <test-cases.md>`
-   → `cases` (Expected quotes a translated text) and `others`. Options:
-   - "English only for message checks (Recommended)" — `<n>` of `<total>` cases; language bugs
+4. **Other languages: ask** (one-language app: skip this step; `langChoice` = the language).
+   Show the primary results (case → passed / failed, one line per failure), then one
+   AskUserQuestion for the other languages together. Get the message-check set first:
+   `$S/flow_sync.py messages <test-cases.md>` → `cases` (Expected quotes a translated text) and
+   `others`. Options:
+   - "<Languages> only for message checks (Recommended)" — `<n>` of `<total>` cases; language bugs
      (e.g. Arabic messages in the English app, BUG-01 in the first real run) show up there;
-   - "Run English for all cases";
-   - "Skip English".
+   - "Run <languages> for all cases";
+   - "Skip <languages>".
    The user already said which at approval or in this conversation → do that, don't ask again.
    Record it in run-info: `langChoice` (one line, e.g. "ar (all cases), then en for message
-   checks only (14 of 24 cases) — chosen after the Arabic run") and `skippedByUser`
-   (`[{case, lang: "en"}]` for every approved Auto case not run in English). Then run the chosen
-   English cases with the same `run_suite.py` command and `--lang en`.
+   checks only (14 of 24 cases) — chosen after the ar run") and `skippedByUser`
+   (`[{case, lang}]` for every approved Auto case × other language not run). Then run each other
+   language's chosen cases with the same `run_suite.py` command and `--lang <code>`, in list order.
 5. `cleanStateLast` cases: after the suites: reset flow (`--no-record`), assisted login, then the
    case with `run_flow.sh` (in each language that ran). `darkModeLast` cases: switch the device to
    dark mode (`xcrun simctl ui <udid> appearance dark` / `adb shell cmd uimode night yes`), run them
@@ -331,7 +348,8 @@ Read `references/maestro.md`; start case flows from `templates/flow.template.yam
    (`failKind` `flow`: selector not found although the element is on screen, parse error): fix,
    re-stamp, re-run with `run_flow.sh --attempt N+1`. Never touch an expected result (hard rule 2).
 7. **Summary:** `$S/parse_results.py status --results <runDir>/artifacts/results.json --cases <ids>`
-   (retest: `--pairs TC-04:en,…`) → show a table: case × ar/en → passed / failed (`failKind`
+   (retest: `--pairs TC-04:en,…`; `--langs` defaults to run-info `languages`) → show a table:
+   case × language → passed / failed (`failKind`
    `check`) / blocked (any other `failKind`: the check was never reached) / skipped by you, plus
    Manual cases listed separately. Never call a blocked pair "still failing": its fix is untested.
 
@@ -350,7 +368,7 @@ Read `references/triage.md` and follow it for every case × language whose final
    list them all); the report marks them "blocked — check not reached", not as failed checks.
 3. Evidence: failure screenshot (`<runDir>/<lang>/<TC>_fail[_aN].png`) + hierarchy from `results.json`;
    `$S/net_log_extract.py <runDir>/artifacts/metro.log <start> <end> --lang <lang>` (masked; `--lang`
-   matters only if en and ar ever ran at the same time; add `--tag/--req-re/--res-re/--lang-field`
+   matters only if two languages ever ran at the same time; add `--tag/--req-re/--res-re/--lang-field`
    from run-info `network` when Phase 2 recorded one). `ambiguous` responses behind a Bug →
    re-run that case alone for a clean window. Then the code the AC traces to.
 4. Classify with the table; annotate with `$S/annotate.py` → `<TC>_fail[_aN]_annotated.png` beside

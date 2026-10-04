@@ -26,7 +26,19 @@ from pathlib import Path
 SEV = ['Critical', 'High', 'Medium', 'Low']
 CLASS_ORDER = ['Bug', 'Content issue', 'Spec gap', 'Design deviation', 'Test data issue', 'Environment issue', 'Flaky',
                'Test error (expectation)', 'Test error']
-LANGS = ['en', 'ar']
+# Run languages, primary first: run-info `languages`, else the test-cases "- Languages:" line,
+# else the en + ar pair every run had before the setting existed.
+LEGACY_LANGS = ['en', 'ar']
+LANG_CODE_RE = re.compile(r'^[a-z]{2,3}(?:-[A-Za-z0-9]+)?$')
+
+
+def run_languages(info, cases_md):
+    langs = [l for l in (info.get('languages') or []) if LANG_CODE_RE.match(str(l))]
+    if not langs and Path(cases_md).exists():
+        m = re.search(r'^-\s*Languages:\s*(.+)$', Path(cases_md).read_text(encoding='utf-8'), re.M)
+        if m:
+            langs = [w for w in re.split(r'[,\s]+', re.sub(r'\(.*?\)', '', m.group(1))) if LANG_CODE_RE.match(w)]
+    return langs or LEGACY_LANGS
 
 
 # ---------- test-cases.md ----------
@@ -325,12 +337,15 @@ def build(a):
     # verdict
     bugs = by_class['Bug']
     worst = min((SEV.index(f['severity']) for f in bugs if f.get('severity') in SEV), default=9)
-    auto_runs = [(c['id'], l) for c in cases if c['mode'] == 'Auto' and c['status'] == 'approved' for l in LANGS]
+    langs = run_languages(info, a.cases)
+    # older runs (no `languages`) ran Arabic first and say so; their columns stay en | ar
+    shown_langs = ['ar', 'en'] if langs == LEGACY_LANGS and not info.get('languages') else langs
+    auto_runs = [(c['id'], l) for c in cases if c['mode'] == 'Auto' and c['status'] == 'approved' for l in langs]
     # retest run: only the pairs that failed in the previous run are in scope
     scope = {(x['case'], x['lang']) for x in info.get('scope') or []}
     if scope:
         auto_runs = [k for k in auto_runs if k in scope]
-    # pairs the user chose not to run (English skipped or limited after the Arabic run)
+    # pairs the user chose not to run (other languages skipped or limited after the primary run)
     user_skipped = {(x['case'], x['lang']) for x in info.get('skippedByUser') or []}
     skipped_pairs = [k for k in auto_runs if k in user_skipped]
     auto_runs = [k for k in auto_runs if k not in user_skipped]
@@ -372,7 +387,7 @@ def build(a):
             + f'{len(not_run)} not run '
             + (f'· {len(skipped_pairs)} skipped by you ' if skipped_pairs else '')
             + (f"(retest of run `{info.get('retestOf', '?')}`: the {len(auto_runs)} case × language pairs that failed there) · "
-               if scope else f'(of {len(auto_runs) + len(skipped_pairs)} = {(len(auto_runs) + len(skipped_pairs)) // 2} cases × ar/en) · ') +
+               if scope else f'(of {len(auto_runs) + len(skipped_pairs)} = {(len(auto_runs) + len(skipped_pairs)) // len(langs)} cases × {"/".join(shown_langs)}) · ') +
             f"Manual cases: {sum(1 for c in cases if c['mode'] == 'Manual' and c['status'] != 'skip')} · "
             f"Skipped: {sum(1 for c in cases if c['status'] == 'skip')}", '']
     counts = Counter((f['classification'], f.get('severity', '—')) for f in findings)
@@ -407,7 +422,7 @@ def build(a):
             f"| Environment | {info.get('env', '—')} ({info.get('apiBase', '—')}) |",
             f"| Maestro | {info.get('maestro', '—')} |",
             f"| test-story | {skill_line(info.get('skill'))} |",
-            f"| Languages | {info.get('langChoice') or 'ar, en'} |",
+            f"| Languages | {info.get('langChoice') or ', '.join(shown_langs)} |",
             f"| Run duration | {fmt_dur(info.get('started', ''), info.get('finished', ''))} |",
             f"| Network log | {'captured' if info.get('networkLogVisible', True) else 'NOT visible (see Gaps)'} |",
             f"| Figma | {info.get('figma', 'not run')} |", '']
@@ -522,23 +537,24 @@ def build(a):
     out += ['## 13. Coverage matrix', '']
     if scope:
         out += ['`–` = not part of this retest (see the previous report).', '']
-    out += ['| AC | Cases | en | ar |', '| --- | --- | --- | --- |']
+    out += ['| AC | Cases | ' + ' | '.join(langs) + ' |', '| --- | --- |' + ' --- |' * len(langs)]
     for r in sorted(acs, key=lambda r: int(re.sub(r'\D', '', r[0]) or 0)):
         ac = r[0]
         cids = [c['id'] for c in cases if ac in c['acs']]
-        en = ', '.join(f'{cid} {cell(cid, "en")}' for cid in cids) or '—'
-        ar = ', '.join(f'{cid} {cell(cid, "ar")}' for cid in cids) or '—'
-        out.append(f"| {ac} | {', '.join(cids) or 'NO CASE'} | {en} | {ar} |")
+        per_lang = [', '.join(f'{cid} {cell(cid, l)}' for cid in cids) or '—' for l in langs]
+        out.append(f"| {ac} | {', '.join(cids) or 'NO CASE'} | " + ' | '.join(per_lang) + ' |')
     out.append('')
 
     # 14. Appendix
     out += ['## 14. Appendix', '', '### Case results', '',
-            '| Case | Title | Mode | en | ar | Attempts | Duration (s) |', '| --- | --- | --- | --- | --- | --- | --- |']
+            '| Case | Title | Mode | ' + ' | '.join(langs) + ' | Attempts | Duration (s) |',
+            '| --- | --- | --- |' + ' --- |' * len(langs) + ' --- | --- |']
     for c in cases:
-        att = max([len(fin.get((c['id'], l), [])) for l in LANGS] or [0])
-        dur = [fin[(c['id'], l)][-1].get('durationSec') for l in LANGS if (c['id'], l) in fin]
+        att = max([len(fin.get((c['id'], l), [])) for l in langs] or [0])
+        dur = [fin[(c['id'], l)][-1].get('durationSec') for l in langs if (c['id'], l) in fin]
         dur_s = ' / '.join(f'{d:.0f}' for d in dur if d is not None) or '—'
-        out.append(f"| {c['id']} | {c['title']} | {c['mode']} | {cell(c['id'], 'en')} | {cell(c['id'], 'ar')} | {att or '—'} | {dur_s} |")
+        out.append(f"| {c['id']} | {c['title']} | {c['mode']} | " + ' | '.join(cell(c['id'], l) for l in langs)
+                   + f" | {att or '—'} | {dur_s} |")
     out.append('')
     fails = [(k, v) for k, v in fin.items() if any(r['status'] != 'passed' for r in v)]
     if fails:

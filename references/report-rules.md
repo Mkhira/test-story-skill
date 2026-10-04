@@ -66,13 +66,14 @@ only files that still exist. A reader without the screenshots must understand ev
 - `code`: repo-relative `path:line`, the line that causes the behaviour when found.
 - `fixOptions`: concrete changes, one `recommended`; for Test error (expectation) the fix is to
   the case, never to the app; for a Content issue the fix names the CMS / server key and the
-  correct en / ar text.
+  correct text in every run language.
 - Retest runs: a failure that matches a previous finding keeps that finding's id with fresh
   evidence; the report adds a before → now table to the summary.
 - `retest`: exact case × language pairs.
 - PII: never paste names, TINs, national IDs, phones, IBANs or emails into any field; refer to test
   data by key (`VALID_TIN`).
-- English only, even for ar findings; quote Arabic UI text exactly when it is the evidence.
+- Findings are written in English whatever the run language; quote UI text in its own language
+  exactly when it is the evidence.
 
 ## After building
 

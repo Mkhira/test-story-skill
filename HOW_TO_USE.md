@@ -48,15 +48,15 @@ approval.
 Run the same command again. The skill finds the unfinished run and offers to continue it from
 where it stopped.
 
-### Choose English up front (optional)
+### Choose the other languages up front (optional, multilingual apps)
 
-Add your English choice so the run does not pause after Arabic to ask:
+Add your choice so the run does not pause after the primary language to ask:
 
 ```text
-/test-story retest checkout — English: message checks only
+/test-story docs/stories/CHECKOUT-001.md checkout — other languages: message checks only
 ```
 
-Choices: `message checks only`, `all cases`, `skip English`.
+Choices: `message checks only`, `all cases`, `skip`.
 
 ## What you answer during a run
 
@@ -66,27 +66,31 @@ Choices: `message checks only`, `all cases`, `skip English`.
    later. What you type is saved in `test-data.local.json` next to the test cases (git-ignored),
    never in a committed file. For "invalid" values the skill offers obviously fake ones.
 3. **Choices:** whether to add `testID` props to the feature's elements (recommended: it makes
-   the tests stable in both languages; the question says exactly which files change), and whether
+   the tests stable in every language; the question says exactly which files change), and whether
    to run cases that send real SMS / email or create records.
 4. **Spec gaps:** for each unclear story sentence that changes an expected result, pick the
    intended behaviour or keep it as a gap.
-5. **Approve:** "Approve and run", "I want to edit the file first", or "Stop here".
+5. **Approve:** "Approve and run", "I want to edit the file first", or "Stop here". The summary
+   before it names the run languages, primary first (e.g. `ar, en`, or just `en`); say so if the
+   primary language is wrong.
 6. **Install / rebuild** only when the installed app does not match your code (after a branch
    switch or a new native package): the skill shows what changed and asks before it runs the
    install (it changes your `node_modules`) or a build (several minutes).
 7. **Log in** on the device when the feature needs a session; the skill waits and checks.
-8. **After the Arabic run:** English for message checks only (recommended), all cases, or skip.
+8. **After the primary-language run** (multilingual apps only): the other languages for message
+   checks only (recommended), all cases, or skip.
 
-## Arabic first, then English
+## Primary language first, then the others
 
-Every automated case runs in Arabic first. Then the skill shows the Arabic results and asks about
-English:
+The run languages are listed in `test-cases.md` (`- Languages: ar, en`), primary first. Every
+automated case runs in the primary language. A one-language app stops there. Otherwise the skill
+shows the primary results and asks about the other languages:
 
 | Choice | Runs | When to use |
 | --- | --- | --- |
 | Message checks only (recommended) | cases whose expected result is a translated text (validation, success, error messages) | everyday runs: language bugs live in the messages |
 | All cases | every case | before a release |
-| Skip English | nothing | quick checks; English-only bugs are not caught |
+| Skip | nothing | quick checks; bugs that show only in the other languages are not caught |
 
 Cases you skip show as "skipped by you" in the report and do not count against the verdict.
 
@@ -98,7 +102,7 @@ After the developers fix the reported problems:
 2. The skill finds the latest run of that story and takes only the case × language pairs whose
    final attempt failed. It shows the list and starts — no approval needed unless you changed
    `test-cases.md`.
-3. Only those pairs run (Arabic first). No Figma comparison.
+3. Only those pairs run (primary language first). No Figma comparison.
 4. The new report starts with a before → now table:
 
    ```text

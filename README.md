@@ -4,8 +4,9 @@
 in every React Native (Expo) project on your machine.
 
 Give it a user story and a feature folder. It writes test cases for you to approve, runs them on an
-iOS simulator or Android emulator with [Maestro](https://maestro.mobile.dev), in **Arabic and
-English**, and writes a bug-and-gap report into the feature folder.
+iOS simulator or Android emulator with [Maestro](https://maestro.mobile.dev), in **each of your
+app's languages** (one, or several such as Arabic and English), and writes a bug-and-gap report
+into the feature folder.
 
 ```
 /test-story docs/stories/CHECKOUT-001.md checkout
@@ -15,11 +16,12 @@ English**, and writes a bug-and-gap report into the feature folder.
 
 - **Story → test cases.** Turns the story into numbered acceptance criteria, traces each one to the
   code, flags unclear sentences as spec gaps, and writes `test-cases.md`: happy paths, negatives,
-  boundaries, bilingual and RTL checks, accessibility and beyond-the-story cases.
+  boundaries, language and RTL checks (multilingual apps), accessibility and beyond-the-story cases.
 - **You approve first.** Nothing runs and no code changes until you approve. The skill asks for
   test data, spec-gap answers and choices as questions; you never have to edit the file by hand.
-- **Arabic first, then you choose English.** All cases run in Arabic. Then you pick: English for
-  message checks only (recommended), English for all cases, or skip English.
+- **Primary language first, then you choose.** All cases run in your app's primary language
+  (for example Arabic). In a multilingual app you then pick for the other languages: message
+  checks only (recommended), all cases, or skip. A one-language app simply runs once.
 - **Retest only what failed.** After a fix, `retest` re-runs only the cases and languages that
   failed last time, and the report shows a before → now table.
 - **Blocked is not failed.** A case that stops before its check (a shared step broke, the app
@@ -104,7 +106,7 @@ flows with your project's Prettier when the project has one, so CI format checks
 | 2. Analyze | reads the code: implementation, translations, exact message texts, path to the feature | — |
 | 3. Test cases | writes `test-cases.md` and asks what it needs | answer, then approve |
 | 4. Prepare | adds approved testIDs, boots the device, checks the installed build matches your native code, starts Metro, smoke test | approve an install / rebuild if asked; log in if the feature needs it |
-| 5. Execute | runs Arabic, then the English you chose | choose English: message checks / all / skip |
+| 5. Execute | runs the primary language, then the other languages you chose | choose: message checks / all / skip (multilingual apps) |
 | 6. Triage | classifies every failure, gathers evidence, verifies bugs | — |
 | 7. Figma | compares screens with Figma frames | give Figma links when asked |
 | 8. Report | keeps the evidence, writes and formats the report | read it, commit it |
@@ -128,7 +130,9 @@ scripts/        deterministic helpers; each prints JSON
 ## Status
 
 - Validated end to end on a real feature on iOS (simulator, Arabic and English), including
-  Arabic-first runs, two live retests, smart retries and run clean-up.
+  primary-language-first runs, two live retests, smart retries and run clean-up.
+- Any set of languages, primary first; one-language apps get one result column (checked against
+  real run data, not yet on a one-language app).
 - Blocked cases and the INCOMPLETE-style reporting were used in a live retest report.
 - The newest additions (flow lint, trying shared steps first, grouping cases by shared steps,
   stopping early, local test data, masked logs) are tested against real run data, not yet in a

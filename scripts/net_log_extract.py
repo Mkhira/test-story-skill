@@ -2,7 +2,7 @@
 """API calls and errors from metro.log inside one case's time window, masked for the report.
 
   net_log_extract.py <metro.log> <startISO> <endISO> [--pad SEC] [--max-body N] [--tag HttpClient]
-                     [--lang en|ar] [--req-re REGEX] [--res-re REGEX] [--lang-field language]
+                     [--lang <code>] [--req-re REGEX] [--res-re REGEX] [--lang-field language]
   net_log_extract.py --mask-file <metro.log>     rewrite the log in place, masked (Phase 8 prune)
 
 Prints JSON {window, calls:[{time, dir, method, url, status, meta, body}], errors:[…], count}.
@@ -14,7 +14,7 @@ Prints JSON {window, calls:[{time, dir, method, url, status, meta, body}], error
   --lang-field, as Phase 2 recorded them in run-info `network`.
 - Masking (hard rule 8) happens here, before anything reaches the agent's context:
   secrets/tokens are removed, PII values keep only their last 2 characters.
-- --lang (en and ar ran in parallel, so their windows overlap in the one Metro log): keeps the
+- --lang (two languages ran in parallel, so their windows overlap in the one Metro log): keeps the
   requests whose meta says that language (e.g. "language":"EN"/"AR") and the responses paired
   with them (the oldest open request to the same path). A response whose open requests come from
   both languages is kept with "ambiguous": true; log errors cannot be attributed and are flagged
@@ -153,7 +153,7 @@ def main():
     ap.add_argument('--pad', type=float, default=2.0)
     ap.add_argument('--max-body', type=int, default=1500)
     ap.add_argument('--tag', default='HttpClient')
-    ap.add_argument('--lang', default='', choices=['', 'en', 'ar'])
+    ap.add_argument('--lang', default='', type=str.lower)
     a = ap.parse_args()
     REQ_RE = re.compile(a.req_re) if a.req_re else REQ_RE
     RES_RE = re.compile(a.res_re) if a.res_re else RES_RE

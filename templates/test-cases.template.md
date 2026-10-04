@@ -47,10 +47,13 @@ next to this file (git-ignored). Synthetic values that only break a rule are wri
 
 ## 7. How the flows reach the feature
 
-- Language switch: {{strategy}}
+- Languages: {{ar, en}} (primary first: it runs first and in full; one language → no switch)
+- Language switch: {{strategy, or none for one language}}
 - Path: {{deep link or tap path}} · wait for: {{element}}
 
 ## 8. Message sources (exact texts the cases assert)
+
+<!-- one text column per run language, in the Languages order -->
 
 | Message | en | ar | Source | Used by |
 | --- | --- | --- | --- | --- |

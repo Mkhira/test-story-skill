@@ -62,10 +62,11 @@ YAML, subflow paths, `${KEY}`s) — a broken flow costs an attempt and a retry o
 
 ## Language order
 
-One device: `run_suite.py --lang ar --setup` first, then (after the user's English choice)
-`--lang en --setup` with the chosen cases. `--setup` switches the language once per suite, not per
-case. A parallel English run on a second device (`clone_device.sh`) is possible only on request:
-both apps share one Metro and append to the same `results.json` under a lock.
+One device: `run_suite.py --lang <primary> --setup` first, then (after the user's choice) each
+other language with `--lang <code> --setup` and the chosen cases. `--setup` switches the language
+once per suite, not per case; a one-language app needs no `--setup` and no `set-language-*`
+subflow. A parallel run of another language on a second device (`clone_device.sh`) is possible
+only on request: both apps share one Metro and append to the same `results.json` under a lock.
 
 ## Text matching
 
@@ -123,7 +124,7 @@ appId: ${APP_ID}
 - tapOn:
     text: "<menu tab en|ar>"
     retryTapIfNoChange: true
-- tapOn: "<Arabic option>"
+- tapOn: "<language option, e.g. العربية>"
 - launchApp:
     stopApp: true
 - extendedWaitUntil:

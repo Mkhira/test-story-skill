@@ -6,7 +6,7 @@
                           [--app-error REGEX]
       Appends one record, copies named screenshots to --shots, the failure screenshot to
       --shots/<case>_fail[_aN].png and its hierarchy to <runDir>/artifacts/hierarchy/, prints the record.
-  parse_results.py status --results R --cases TC-01,TC-02 [--langs en,ar] [--pairs TC-04:en,TC-11:ar]
+  parse_results.py status --results R --cases TC-01,TC-02 [--langs ar,en] [--pairs TC-04:en,TC-11:ar]
       Final state per case and language, and the (case, lang) pairs still to run → resume point.
       --pairs replaces cases × langs. Without it, a run-info.json `scope` (retest run) next to
       results.json limits the pairs to that scope.
@@ -211,10 +211,13 @@ def status(a):
         pairs = [tuple(p.split(':')) for p in a.pairs.split(',') if p]
     else:
         cases = [c for c in a.cases.split(',') if c]
-        pairs = [(c, l) for l in a.langs.split(',') for c in cases]
-        # a retest run only covers its scope; without this, resuming it would run every case
         info = Path(a.results).parent / 'run-info.json'
-        scope = json.loads(info.read_text(encoding='utf-8')).get('scope') if info.exists() else None
+        meta = json.loads(info.read_text(encoding='utf-8')) if info.exists() else {}
+        # --langs, else the run's languages (run-info), else the en + ar pair of older runs
+        langs = [l for l in a.langs.split(',') if l] or meta.get('languages') or ['en', 'ar']
+        pairs = [(c, l) for l in langs for c in cases]
+        # a retest run only covers its scope; without this, resuming it would run every case
+        scope = meta.get('scope')
         if scope:
             keep = {(x['case'], x['lang']) for x in scope}
             pairs = [p for p in pairs if p in keep]
@@ -245,6 +248,6 @@ if __name__ == '__main__':
     for f in ('junit', 'console', 'outdir', 'results', 'case', 'lang', 'attempt', 'start', 'end', 'exit', 'flow',
               'shots', 'cases', 'pairs', 'app-error'):
         p.add_argument('--' + f, default='')
-    p.add_argument('--langs', default='en,ar')
+    p.add_argument('--langs', default='')
     a = p.parse_args()
     print(json.dumps({'append': append, 'status': status, 'failed': failed}[a.cmd](a), ensure_ascii=False, indent=1))

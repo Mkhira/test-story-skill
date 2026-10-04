@@ -6,15 +6,16 @@
   flow_sync.py data  <test-cases.md>            → JSON: {values: {KEY: value}, unfilled: [KEY], usedBy: {KEY: [TC]},
                                                   local: [KEY]}
   flow_sync.py messages <test-cases.md>         → JSON: {cases: [TC], others: [TC]} — approved Auto cases that
-                                                  check a translated text (the "English only for message checks" set)
+                                                  check a translated text (the "other languages only for message checks" set)
   flow_sync.py lint  <test-cases.md> <e2eDir>   → JSON: {ok, problems: [...]} — run before every suite (Phase 5)
   flow_sync.py smoke <test-cases.md> <e2eDir> [--min 3] → JSON: {subflows: [...]} — the shared subflows to run
                                                   once before the suite (Phase 4 deep smoke)
 
 Test data: the Value column of the Test data table holds synthetic values. A real value (an ID,
 mobile, email or account that exists) is kept out of git: the column says `local` and the value
-lives in <story>/test-data.local.json ({"KEY": "value"}, git-ignored). Keys ending in _AR / _EN are
-per-language variants: run_flow.sh passes them as KEY in that language's run.
+lives in <story>/test-data.local.json ({"KEY": "value"}, git-ignored). Keys ending in a language
+code (KEY_AR, KEY_EN, KEY_FR …) are per-language variants: run_flow.sh passes them as KEY in that
+language's run.
 
 A flow starts with three header comments:
   # test-story case: TC-04
@@ -211,6 +212,7 @@ def data(md):
 RUNFLOW_RE = re.compile(r'runFlow:\s*(?:\n\s+file:\s*)?["\']?([\w./-]+\.ya?ml)')
 ENV_RE = re.compile(r'\$\{([A-Z][A-Z0-9_]*)\}')
 BUILTIN_ENV = {'LANG_CODE'}
+LANG_SUFFIX_RE = re.compile(r'^(.+)_([A-Z]{2,3})$')  # KEY_AR → KEY (a per-language variant)
 
 
 def subflows_of(flow, seen=None):
@@ -247,7 +249,7 @@ def lint(md, e2e):
     e2e = Path(e2e)
     d = data(md)
     known = set(d['values']) | BUILTIN_ENV
-    known |= {k[:-3] for k in d['values'] if k.endswith(('_AR', '_EN'))}
+    known |= {m.group(1) for k in d['values'] for m in [LANG_SUFFIX_RE.match(k)] if m}
     problems, checked = [], set()
     for c in parse_cases(md):
         if c['mode'] != 'auto' or c['status'] != 'approved':
@@ -298,20 +300,23 @@ def smoke(md, e2e, minimum=3):
     return {'subflows': [{'file': str(s), 'cases': shared[s]} for s in sorted(top, key=lambda s: -len(shared[s]))]}
 
 
-ARABIC_QUOTED = re.compile(r'["“][^"”]*[\u0600-\u06FF][^"”]*["”]')
+# A translated text in an Expected line: `<lang>: "…"` (the template's form) or a quoted text in a
+# non-Latin script (older cases quote the Arabic text without a label).
+LANG_LABELLED = re.compile(r'(?<![\w-])[a-z]{2,3}(?:-[A-Za-z0-9]+)?:\s*["“]')
+NON_LATIN_QUOTED = re.compile(r'["“][^"”]*[^\x00-\u024F\s\d\W][^"”]*["”]')
 
 
 def messages(md):
     """Cases whose expected result is a translated text: language bugs (e.g. Arabic messages in the
-    English app) only show there. Rule: the Expected line quotes an Arabic text (the case gives the
-    en / ar pair), or the Message sources table lists the case under Used by."""
+    English app) only show there. Rule: the Expected line quotes a text per language (`en: "…"`) or
+    in a non-Latin script, or the Message sources table lists the case under Used by."""
     text = Path(md).read_text(encoding='utf-8')
     listed = set()
     m = re.search(r'^##\s+\d*\.?\s*Message sources.*?$(.*?)(?=^##\s)', text, re.M | re.S)
     if m:
         for line in m.group(1).splitlines():
             cells = [c.strip() for c in line.strip().strip('|').split('|')]
-            if len(cells) >= 5:
+            if len(cells) >= 3:  # Message | one column per language | Source | Used by
                 listed.update(re.findall(r'TC-\d+', cells[-1]))
     hits, others = [], []
     for c in parse_cases(md):
@@ -319,7 +324,8 @@ def messages(md):
             continue
         block = re.search(r'^###\s+' + c['id'] + r'\b.*?(?=^##|\Z)', text, re.M | re.S).group(0)
         exp = re.search(r'^-\s*Expected:\s*(.*)$', block, re.M)
-        (hits if c['id'] in listed or (exp and ARABIC_QUOTED.search(exp.group(1))) else others).append(c['id'])
+        quoted = exp and (LANG_LABELLED.search(exp.group(1)) or NON_LATIN_QUOTED.search(exp.group(1)))
+        (hits if c['id'] in listed or quoted else others).append(c['id'])
     return {'cases': hits, 'others': others}
 
 

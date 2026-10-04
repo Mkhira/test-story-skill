@@ -1,6 +1,7 @@
 # Test design (Phase 3)
 
-Every case is end-to-end on a device and runs in both en and ar unless marked otherwise.
+Every case is end-to-end on a device and runs in every run language (`- Languages:`, primary
+first) unless marked otherwise.
 Expected results are observable on screen (or in the network log) and come from an AC, a
 beyond-the-story rule, or the story's own wording. Never invent a number, a timing or a text.
 
@@ -21,13 +22,15 @@ SPEC-GAP instead of guessing.
 
 ## Expected texts
 
-Quote the exact en and ar text from the Phase 2 message map (app translation key, CMS /
-service-message key, or server). Write both in Expected (`en: "…" · ar: "…"`) with the source,
+Quote the exact text in every run language from the Phase 2 message map (app translation key,
+CMS / service-message key, or server). Write each, labelled by its language code, in Expected
+(`en: "…" · ar: "…"`; one language → just the quoted text) with the source,
 e.g. `(CMS e-signup/NID_PREFIX)`. A server text known only after a call → expect the app's
 behaviour (a message appears under the field) and record the text the run sees. Never paraphrase:
 a wrong expected text becomes a Test error (expectation) after an hour of running.
 
-## Bilingual checks (always)
+## Language checks (whenever the app has more than one language; the script / RTL ones when a
+## run language is Arabic or another right-to-left / non-Latin one)
 
 - Arabic letters in text inputs; Eastern Arabic digits (٠-٩) in numeric inputs (expect them
   normalised to Western digits when the app does that, e.g. in a shared base input).

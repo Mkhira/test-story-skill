@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Run one language's cases on one device, in order (Phase 5): Arabic first, then the English
-cases the user chose. (Two suites can run in parallel on two devices — results.json is locked —
-but only when the user asks.)
+"""Run one language's cases on one device, in order (Phase 5): the primary language first, then
+the cases the user chose for each other language. (Two suites can run in parallel on two
+devices — results.json is locked — but only when the user asks.)
 
   run_suite.py --run <runDir> --e2e <story>/e2e --lang en --device <id> --platform ios --app <appId>
                --cases TC-01,TC-02 [--data <runDir>/artifacts/data.json] [--setup]

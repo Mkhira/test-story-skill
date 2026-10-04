@@ -30,8 +30,8 @@ Every final failed / error result (case × language) gets exactly one classifica
 3. **Inspect** the final failing attempt:
    - screenshot (`failureScreenshot`) and hierarchy
    - `scripts/net_log_extract.py <metro.log> <start> <end> --lang <lang>` → calls + errors in the
-     case window (already masked; still quote only the fields relevant to the finding). en and ar
-     run in parallel into one Metro log: `--lang` keeps that language's requests and their
+     case window (already masked; still quote only the fields relevant to the finding). When two
+     languages run in parallel into one Metro log: `--lang` keeps that language's requests and their
      responses. `ambiguous` responses or `errorsMayMix` behind a Bug → re-run the case alone and
      extract again before citing network evidence.
    - the code the AC traces to (Phase 2), to cite file:line

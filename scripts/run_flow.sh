@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# run_flow.sh <flow.yaml> <en|ar> <runDir> <deviceId> <caseId> [--data data.json] [--attempt N] [--timeout SEC]
+# run_flow.sh <flow.yaml> <lang code> <runDir> <deviceId> <caseId> [--data data.json] [--attempt N] [--timeout SEC]
 #             [--app-error REGEX] [--no-record]
 # --no-record: setup flows (language switch, smoke) → print pass/fail JSON only, no results.json entry.
 # Runs one Maestro flow, records UTC start/end (to cut metro.log later), copies the flow's named
@@ -18,11 +18,11 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 OUT="${TMPDIR:-/tmp}/test-story/$(basename "$RUN")/$LANGV/${CASE}_a${ATTEMPT}"; rm -rf "$OUT"; mkdir -p "$OUT" "$RUN/artifacts"
 ENV_ARGS=(-e "LANG_CODE=$LANGV")
 if [ -n "$DATA" ]; then
-  # KEY_AR / KEY_EN are per-language variants: in the ar run KEY_AR is also passed as KEY
+  # KEY_<LANG> keys are per-language variants: in the ar run KEY_AR is also passed as KEY
   while IFS= read -r kv; do ENV_ARGS+=(-e "$kv"); done < <(python3 -c '
 import json,sys
 d=json.load(open(sys.argv[1])); suf="_"+sys.argv[2].upper()
-d.update({k[:-3]: v for k, v in list(d.items()) if k.endswith(suf)})
+d.update({k[:-len(suf)]: v for k, v in list(d.items()) if k.endswith(suf)})
 [print(f"{k}={v}") for k,v in d.items()]' "$DATA" "$LANGV")
 fi
 START=$(python3 -c 'from datetime import datetime,timezone; print(datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00","Z"))')

@@ -12,6 +12,7 @@ appId: {{APP_ID}}
 # The expected result. label "EXPECT …" = this case's check: a failure here is deterministic and
 # is not retried. timeout 5000 for local UI / validation, 15000 right after a server call.
 - extendedWaitUntil:
+    # two languages; one language → the plain text; three → nest the ternary
     visible: "${LANG_CODE == 'ar' ? '{{ar text}}' : '{{en text}}'}"
     timeout: 5000
     label: "EXPECT step2: {{short expected result}}"
