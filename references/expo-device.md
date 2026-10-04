@@ -8,7 +8,7 @@ booting, building, deep links and language. Read it first when it exists.
 | Step | Command |
 | --- | --- |
 | Tools | `scripts/preflight.sh <ios\|android> [--install-maestro] [--install-java]` (flags only after the user agreed) |
-| Device | `scripts/device.sh <ios\|android> "<name/udid/avd or empty>" <appId>` → `deviceId`, `appInstalled`, `appRunning` |
+| Device | `scripts/device.sh <ios\|android> "<name/udid/avd or empty>" <appId>` → `deviceId`, `appInstalled`, `appRunning` (empty name: the booted device, else the most recently booted iPhone; `appInstalled:false` → build with `run_app.sh --build`) |
 | Metro + app | `scripts/run_app.sh <platform> <runDir> <appId> <deviceId> [--build] [--restart-metro]` |
 | Screen | `scripts/dump_hierarchy.sh <runDir> <label> <deviceId> [--find REGEX]` |
 | Second device (only on request) | `scripts/clone_device.sh <ios\|android> <appId> <deviceId>` → `deviceId` of a clone with the same build (iOS: "<name> (test-story)", reused; Android: untested). A second idle simulator pushed 1.4 GB into swap on a 16 GB Mac |

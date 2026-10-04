@@ -10,6 +10,10 @@ Prints JSON {ok, problems:[…], unclassified:[…]}; exit 1 when not ok.
   2–3 fixOptions with exactly one recommended, retest.
 - Bugs: an AC (or "beyond-story:<rule>"), verified is true/false with a verifierReason, and
   evidence.network or an explicit "none" (hard rule 7).
+- A blocked pair (final failKind flow / app / timeout: the check was never reached) must be
+  covered by the finding for its blocking step, not by a check finding carried over from an
+  earlier run: Content issue / Spec gap / Design deviation there is a problem; a Bug there is a
+  warning (an app bug can block a step — make sure the finding describes that step).
 """
 import json
 import sys
@@ -24,7 +28,7 @@ def main(results_path, triage_path):
     triage = json.load(open(triage_path))
     findings = triage.get('findings', [])
     fixes = {(f['case'], f['lang']) for f in triage.get('flowFixes', [])}
-    problems, unclassified = [], []
+    problems, unclassified, warnings = [], [], []
 
     attempts = defaultdict(list)
     for r in results:
@@ -42,6 +46,17 @@ def main(results_path, triage_path):
         failed_before = any(r['status'] != 'passed' for r in runs[:-1])
         ids = covers.get(key, [])
         if final != 'passed':
+            fk = runs[-1].get('failKind')
+            if fk and fk != 'check':
+                for f in findings:
+                    if f.get('id') not in ids:
+                        continue
+                    if f.get('classification') in ('Content issue', 'Spec gap', 'Design deviation'):
+                        problems.append(f"{key[0]} {key[1]}: blocked before its check ({fk}) but covered by "
+                                        f"{f['id']} ({f['classification']}); cover it with the blocking step's finding")
+                    elif f.get('classification') == 'Bug':
+                        warnings.append(f"{key[0]} {key[1]}: blocked before its check ({fk}); {f['id']} must describe "
+                                        'the blocking step, not the unchecked expected result')
             if not ids:
                 unclassified.append(f'{key[0]} {key[1]}: final {final}, no finding')
             elif len(ids) > 1:
@@ -78,7 +93,8 @@ def main(results_path, triage_path):
                 problems.append(f'{fid}: Bug without evidence.network (use "none" when no call applies)')
 
     ok = not problems and not unclassified
-    print(json.dumps({'ok': ok, 'problems': problems, 'unclassified': unclassified}, ensure_ascii=False, indent=1))
+    print(json.dumps({'ok': ok, 'problems': problems, 'unclassified': unclassified, 'warnings': warnings},
+                     ensure_ascii=False, indent=1))
     return 0 if ok else 1
 
 

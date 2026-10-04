@@ -16,7 +16,17 @@ Every final failed / error result (case × language) gets exactly one classifica
    `Flaky` with both attempts' evidence). `failKind: check` (a step labelled `EXPECT …` failed) is
    not retried: the check waited its full timeout. Open the failure hierarchy: the expected screen,
    settled → deterministic, classify. Still loading or a different screen → retry once by hand
-   (`run_flow.sh --attempt N+1`).
+   (`run_flow.sh --attempt N+1`). `failKind: app` (a step before the check failed while an
+   app error dialog was on screen; `appError` holds its text) is not retried either: find the
+   server call behind it in the network window.
+   **Blocked pairs:** any final `failKind` other than `check` never reached the expected result.
+   When several pairs stop at the same step (or `run_suite.py` exited 6), triage the step once:
+   one finding (Bug, Environment issue, Test data issue or Test error) whose `case` / `lang` list
+   every blocked pair. The report shows them as "blocked — check not reached", never as failed
+   checks, and a retest table never calls them "still failing". Never carry an earlier check
+   finding (e.g. the BUG for a wrong message) over to a pair that is now blocked:
+   `triage_check.py` refuses a Content issue / Spec gap / Design deviation there and warns on a
+   Bug.
 3. **Inspect** the final failing attempt:
    - screenshot (`failureScreenshot`) and hierarchy
    - `scripts/net_log_extract.py <metro.log> <start> <end> --lang <lang>` → calls + errors in the

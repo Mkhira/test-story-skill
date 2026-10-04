@@ -9,7 +9,8 @@ Kept:
   figma-dd/**                   design-deviation side-by-sides (app next to Figma)
   figma/**                      the exported Figma frames they were compared against
   artifacts/{results,triage,run-info,data}.json, artifacts/metro.log
-                                small; needed to rebuild the report or resume
+                                small; needed to rebuild the report or resume. metro.log is
+                                rewritten masked (config secrets, tokens, typed test data)
 Everything else is deleted: step screenshots, raw failure screenshots, hierarchy dumps, any
 leftover Maestro output, and the run's temp dir under $TMPDIR/test-story/<runId>.
 Prints JSON {kept, deleted, freedMB}. Run it before report_build.py so the report only lists
@@ -26,8 +27,12 @@ import argparse
 import json
 import os
 import shutil
+import sys
 import time
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from net_log_extract import mask_file  # noqa: E402
 
 KEEP_ARTIFACTS = {'results.json', 'triage.json', 'run-info.json', 'data.json', 'metro.log'}
 
@@ -102,12 +107,15 @@ def main():
         for d in sorted((p for p in run.rglob('*') if p.is_dir()), key=lambda p: len(p.parts), reverse=True):
             if not any(d.iterdir()):
                 d.rmdir()
+        log = run / 'artifacts' / 'metro.log'
+        masked = mask_file(str(log)) if log.exists() else None
         tmp = Path(os.environ.get('TMPDIR', '/tmp')) / 'test-story' / run.name
         if tmp.exists():
             freed += sum(p.stat().st_size for p in tmp.rglob('*') if p.is_file())
             shutil.rmtree(tmp)
     gone, freed_old = old_runs(run, a.keep_runs, a.dry_run)
     print(json.dumps({'dryRun': a.dry_run, 'kept': kept, 'deletedCount': len(deleted),
+                      'metroLogMasked': None if a.dry_run else (masked or {}).get('masked'),
                       'oldRunsDeleted': gone, 'freedMB': round((freed + freed_old) / 1e6, 1),
                       'runFolderMB': round(size(run) / 1e6, 1)}, ensure_ascii=False, indent=1))
 

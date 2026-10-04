@@ -24,9 +24,13 @@ Story: {{story path or "pasted"}} · Feature folder: {{feature path}}
 
 ## 4. Test data (real test-environment values you enter; never invented)
 
+Real values are kept out of git: Value says `local` and the value is in `test-data.local.json`
+next to this file (git-ignored). Synthetic values that only break a rule are written here.
+
 | Key | Meaning | Value | Used by |
 | --- | --- | --- | --- |
 | VALID_TIN | TIN that exists in the test env | {{fill}} | TC-01, TC-04 |
+| WRONG_PREFIX_TIN | 10 digits not starting with 3 (synthetic) | 1000000000 | TC-05 |
 
 ## 5. Figma screens
 

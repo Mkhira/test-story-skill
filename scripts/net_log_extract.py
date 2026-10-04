@@ -2,13 +2,16 @@
 """API calls and errors from metro.log inside one case's time window, masked for the report.
 
   net_log_extract.py <metro.log> <startISO> <endISO> [--pad SEC] [--max-body N] [--tag HttpClient]
-                     [--lang en|ar]
+                     [--lang en|ar] [--req-re REGEX] [--res-re REGEX] [--lang-field language]
+  net_log_extract.py --mask-file <metro.log>     rewrite the log in place, masked (Phase 8 prune)
 
 Prints JSON {window, calls:[{time, dir, method, url, status, meta, body}], errors:[…], count}.
 - A line belongs to the window by its own ISO timestamp; lines without one (LogBox errors, stack
   traces) are kept when they sit between two in-window lines.
 - Requests look like "→ [DEV] GET https://…" and responses "← [DEV] 200 /v1/…" (ZATCA
-  LoggerService); other shapes are kept as raw lines under calls with dir "?".
+  LoggerService); other shapes are kept as raw lines under calls with dir "?". Another project's
+  logger: pass its tag and --req-re (groups: method, url) / --res-re (groups: status, url) /
+  --lang-field, as Phase 2 recorded them in run-info `network`.
 - Masking (hard rule 8) happens here, before anything reaches the agent's context:
   secrets/tokens are removed, PII values keep only their last 2 characters.
 - --lang (en and ar ran in parallel, so their windows overlap in the one Metro log): keeps the
@@ -20,6 +23,7 @@ Prints JSON {window, calls:[{time, dir, method, url, status, meta, body}], error
 import argparse
 import json
 import re
+import sys
 from datetime import datetime, timedelta, timezone
 
 TS_RE = re.compile(r'\[?(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)\]?')
@@ -27,14 +31,69 @@ LEVEL_RE = re.compile(r'^\s*(LOG|DEBUG|INFO|WARN|ERROR)\s+(.*)$')
 REQ_RE = re.compile(r'→\s*(?:\[\w+\]\s*)?(GET|POST|PUT|PATCH|DELETE|HEAD)\s+(\S+)')
 RES_RE = re.compile(r'←\s*(?:\[\w+\]\s*)?(\d{3}|ERR\w*|NETWORK\w*)\s+(\S+)')
 
-SECRET_KEYS = re.compile(r'(authorization|access_?token|refresh_?token|id_?token|token|secret|password|'
-                         r'api_?key|encryption_?key|encryption_?iv|cookie|set-cookie|session)', re.I)
-PII_KEYS = re.compile(r'(name|tin|vat_?number|national_?id|nid|iqama|id_?number|identity|mobile|phone|'
-                      r'email|iban|account_?number|address|birth|dob|passport|cr_?number|commercial)', re.I)
+# Keys are judged by their words (camelCase / snake_case split), so "tin" matches vatTin or TIN
+# but not "setting" or "waiting".
+SECRET_WORDS = {'authorization', 'token', 'secret', 'password', 'passcode', 'cookie', 'session', 'encryption',
+                'otp', 'pin', 'credential', 'credentials', 'signature', 'apikey'}
+SECRET_PAIRS = [('api', 'key'), ('client', 'key'), ('private', 'key')]
+PII_WORDS = {'name', 'tin', 'vat', 'national', 'nid', 'iqama', 'identity', 'mobile', 'phone', 'email', 'iban',
+             'address', 'birth', 'dob', 'passport', 'cr', 'commercial', 'msisdn', 'username'}
+PII_PAIRS = [('id', 'number'), ('account', 'number'), ('license', 'number')]
 SAFE_KEYS = re.compile(r'^(serviceName|serviceKey|servicePageName|fileName|typeName|statusName|'
                        r'description|code|message|requestID)$', re.I)
 BEARER_RE = re.compile(r'(Bearer\s+)[A-Za-z0-9\-._~+/]+=*', re.I)
 JWT_RE = re.compile(r'eyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+')
+LANG_FIELD = 'language'
+
+
+def words(key):
+    return {w.lower() for w in re.findall(r'[A-Z]+(?![a-z])|[A-Z]?[a-z]+|\d+', key)}
+
+
+def _hit(key, single, pairs):
+    w = words(key)
+    return bool(w & single) or any(a in w and b in w for a, b in pairs)
+
+
+def is_secret(key):
+    return _hit(key, SECRET_WORDS, SECRET_PAIRS)
+
+
+def is_pii(key):
+    return _hit(key, PII_WORDS, PII_PAIRS) and not SAFE_KEYS.match(key)
+
+
+# "key": "value" / \"key\": \"value\" (JSON escaped inside a string) / "key": 123
+KV_RE = re.compile(r'(\\?")([A-Za-z_][\w-]*)(\\?"\s*:\s*)(\\"(?:(?!\\").)*\\"|"(?:[^"\\]|\\.)*"|-?\d{3,})')
+
+
+def mask_raw(s):
+    """Mask secrets and PII in any text, keeping its shape (log lines stay parseable)."""
+    def repl(m):
+        key, val = m.group(2), m.group(4)
+        q = '\\"' if val.startswith('\\"') else ('"' if val.startswith('"') else '')
+        inner = val[len(q):len(val) - len(q)] if q else val
+        if is_secret(key):
+            new = '[removed]'
+        elif is_pii(key) and inner:
+            new = mask_value(inner)
+        else:
+            return m.group(0)
+        q = q or '"'
+        return f'{m.group(1)}{key}{m.group(3)}{q}{new}{q}'
+    s = KV_RE.sub(repl, s)
+    return JWT_RE.sub('[jwt removed]', BEARER_RE.sub(r'\1[removed]', s))
+
+
+def mask_file(path):
+    """Rewrite a kept metro.log masked: the raw log holds config secrets (e.g. clientSecret),
+    tokens and the test data people typed."""
+    lines = open(path, encoding='utf-8', errors='replace').read().splitlines()
+    out = [mask_raw(l) for l in lines]
+    changed = sum(1 for a, b in zip(lines, out) if a != b)
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(out) + '\n')
+    return {'file': path, 'lines': len(lines), 'masked': changed}
 
 
 def parse_ts(s):
@@ -51,9 +110,9 @@ def mask(obj, key=''):
         return {k: mask(v, k) for k, v in obj.items()}
     if isinstance(obj, list):
         return [mask(v, key) for v in obj]
-    if key and SECRET_KEYS.search(key) and not isinstance(obj, bool):
+    if key and is_secret(key) and not isinstance(obj, bool):
         return '[removed]'
-    if key and PII_KEYS.search(key) and not SAFE_KEYS.match(key) and isinstance(obj, (str, int)) and not isinstance(obj, bool):
+    if key and is_pii(key) and isinstance(obj, (str, int)) and not isinstance(obj, bool):
         return mask_value(obj)
     if isinstance(obj, str):
         return JWT_RE.sub('[jwt removed]', BEARER_RE.sub(r'\1[removed]', obj))
@@ -65,9 +124,7 @@ def mask_text(s):
     try:
         return json.dumps(mask(json.loads(s)), ensure_ascii=False)
     except Exception:
-        s = JWT_RE.sub('[jwt removed]', BEARER_RE.sub(r'\1[removed]', s))
-        s = re.sub(r'("(?:[^"]*(?:secret|token|password|key|iv)[^"]*)"\s*:\s*)"[^"]*"', r'\1"[removed]"', s, flags=re.I)
-        return s
+        return mask_raw(s)
 
 
 def parts_of(line):
@@ -86,13 +143,21 @@ def parts_of(line):
 
 
 def main():
+    global REQ_RE, RES_RE, LANG_FIELD
+    if len(sys.argv) == 3 and sys.argv[1] == '--mask-file':
+        print(json.dumps(mask_file(sys.argv[2])))
+        return
     ap = argparse.ArgumentParser()
     ap.add_argument('log'); ap.add_argument('start'); ap.add_argument('end')
+    ap.add_argument('--req-re'); ap.add_argument('--res-re'); ap.add_argument('--lang-field', default='language')
     ap.add_argument('--pad', type=float, default=2.0)
     ap.add_argument('--max-body', type=int, default=1500)
     ap.add_argument('--tag', default='HttpClient')
     ap.add_argument('--lang', default='', choices=['', 'en', 'ar'])
     a = ap.parse_args()
+    REQ_RE = re.compile(a.req_re) if a.req_re else REQ_RE
+    RES_RE = re.compile(a.res_re) if a.res_re else RES_RE
+    LANG_FIELD = a.lang_field
     lo = parse_ts(a.start) - timedelta(seconds=a.pad)
     hi = parse_ts(a.end) + timedelta(seconds=a.pad)
 
@@ -148,7 +213,7 @@ def main():
 
 
 def req_lang(meta):
-    m = re.search(r'"language"\s*:\s*"(\w+)"', meta or '')
+    m = re.search(r'"' + re.escape(LANG_FIELD) + r'"\s*:\s*"(\w+)"', meta or '')
     return m.group(1).lower() if m else None
 
 

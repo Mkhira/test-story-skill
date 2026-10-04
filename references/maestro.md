@@ -14,7 +14,9 @@ Proven on Maestro 2.11.0, iOS 26.2 simulator, ZATCA Expo dev build (30 Sep 2026)
 ```
 
 Start every case flow from `templates/flow.template.yaml`. After writing or regenerating a case
-flow, run `flow_sync.py stamp <test-cases.md> <flow>`; never hand-write the header lines.
+flow, run `format_md.sh <flow>` then `flow_sync.py stamp <test-cases.md> <flow>`; never hand-write
+the header lines. Before a suite, `flow_sync.py lint` checks every case flow (EXPECT label, stamp,
+YAML, subflow paths, `${KEY}`s) — a broken flow costs an attempt and a retry otherwise.
 
 ## Conventions
 
@@ -42,8 +44,15 @@ flow, run `flow_sync.py stamp <test-cases.md> <flow>`; never hand-write the head
   expected>"` (map form: `- assertVisible: {text: …, label: …}` or inside `extendedWaitUntil`).
   `parse_results.py` reads the failed step's label: `EXPECT` → `failKind: check`, which
   `run_suite.py` never retries (it already waited on a settled screen). Navigation and setup waits
-  have no label → `failKind: flow`, retried once. In the first real run every one of 25 retries of
-  a failed check failed again and the retries took about an hour.
+  have no label → `failKind: flow`, retried once, unless an app error dialog is on the failure
+  screen (`failKind: app`, matched with `--app-error`): the app refused the step, so a retry
+  would fail the same way. In the first real run every one of 25 retries of a failed check failed
+  again and the retries took about an hour.
+- **Order and fail fast:** `run_suite.py` runs cases that share subflows next to each other, and
+  when two cases in a row stop at the same non-`EXPECT` step it exits
+  6 instead of running the rest. In the 2026-10-04 retest the shared contact-verification step
+  failed (the OTP send was rejected by the app) and 5 cases × 2 languages × 2 attempts ran into
+  it for about 37 minutes; with fail fast it stops after the second case.
 - Timeouts by what is awaited:
   - local UI / validation message / enabled state: `timeout: 5000`
   - right after a server call (verify, submit, search): `timeout: 15000`

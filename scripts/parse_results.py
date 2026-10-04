@@ -3,6 +3,7 @@
 
   parse_results.py append --junit J --console C --outdir D --results R --case TC-04 --lang en
                           --attempt 1 --start ISO --end ISO --exit N --flow F --shots <runDir>/<lang>
+                          [--app-error REGEX]
       Appends one record, copies named screenshots to --shots, the failure screenshot to
       --shots/<case>_fail[_aN].png and its hierarchy to <runDir>/artifacts/hierarchy/, prints the record.
   parse_results.py status --results R --cases TC-01,TC-02 [--langs en,ar] [--pairs TC-04:en,TC-11:ar]
@@ -17,7 +18,13 @@ Each record carries `failedCommand` (Maestro's failing step: type, label, messag
   check   – a step labelled "EXPECT …" failed: the expected result was not met on a settled screen.
             Deterministic; run_suite.py does not retry it.
   timeout – the per-case time limit killed Maestro.
+  app     – another step failed while the failure screen shows an app error (a text matching
+            --app-error, default: generic "Something went wrong" dialogs). The app refused the step
+            (e.g. a server call it could not handle) → deterministic, not retried. `appError` holds
+            the matched text.
   flow    – any other step (tap, input, navigation wait, subflow): can be timing → retried once.
+Only `check` means the case reached its expected result; every other kind stopped before it
+("blocked" in the report: the expected result was never checked).
 """
 import argparse
 import fcntl
@@ -91,13 +98,49 @@ def failed_command(outdir):
     return best
 
 
-def fail_kind(status, exit_code, cmd):
+# Generic error-dialog titles (en/ar). Projects pass their own with --app-error (Phase 2 finds them).
+# Console "[ERROR]" lines are left out on purpose: dev builds show unrelated console errors on
+# every screen, and matching them would stop the retry that rescues real timing flakes.
+DEFAULT_APP_ERROR = r'Something went wrong|An error occurred|Unexpected error|حدث خطأ'
+
+
+def screen_texts(hier_path):
+    texts = []
+
+    def walk(n):
+        if isinstance(n, dict):
+            at = n.get('attributes') or {}
+            for k in ('text', 'accessibilityText', 'hintText'):
+                if at.get(k):
+                    texts.append(str(at[k]))
+            for c in n.get('children') or []:
+                walk(c)
+    try:
+        walk(json.loads(Path(hier_path).read_text(encoding='utf-8', errors='replace')))
+    except Exception:
+        pass
+    return texts
+
+
+def app_error(hier_path, regex):
+    if not hier_path or not regex:
+        return ''
+    for t in screen_texts(hier_path):
+        m = re.search(regex, t)
+        if m:
+            return t[:160]
+    return ''
+
+
+def fail_kind(status, exit_code, cmd, app_err=''):
     if status == 'passed':
         return None
     if exit_code in ('142', '14'):
         return 'timeout'
     if cmd and cmd['label'].upper().startswith('EXPECT'):
         return 'check'
+    if app_err:
+        return 'app'
     return 'flow'
 
 
@@ -144,7 +187,10 @@ def append(a):
            'failureHierarchy': str(fail_hier) if fail_hier else None}
     cmd = failed_command(a.outdir) if status != 'passed' else None
     rec['failedCommand'] = cmd
-    rec['failKind'] = fail_kind(status, a.exit, cmd)
+    app_err = app_error(fail_hier, a.app_error or DEFAULT_APP_ERROR) if status != 'passed' else ''
+    if app_err:
+        rec['appError'] = app_err
+    rec['failKind'] = fail_kind(status, a.exit, cmd, app_err)
     with locked(a.results):
         records = load(a.results)
         records.append(rec)
@@ -197,7 +243,7 @@ if __name__ == '__main__':
     p = argparse.ArgumentParser()
     p.add_argument('cmd', choices=['append', 'status', 'failed'])
     for f in ('junit', 'console', 'outdir', 'results', 'case', 'lang', 'attempt', 'start', 'end', 'exit', 'flow',
-              'shots', 'cases', 'pairs'):
+              'shots', 'cases', 'pairs', 'app-error'):
         p.add_argument('--' + f, default='')
     p.add_argument('--langs', default='en,ar')
     a = p.parse_args()

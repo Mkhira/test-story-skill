@@ -19,7 +19,10 @@ the previous run id and the `[{case, lang}]` pairs re-run), `langChoice` (one li
 which language and why) and `skippedByUser` (`[{case, lang}]` the user chose not to run — shown as
 "skipped by you", not as "not run", and not held against the verdict), `testIdsAdded` and `passThroughs` (file,
 line, id / component, from Phase 4), `networkLogVisible`, `figma` (`"compared"` or
-`"not run: <reason>"`), `notes` (short facts a reader needs, e.g. "session expired once; re-ran
+`"not run: <reason>"`), `network` (`{tag, reqRe, resRe, langField}` when the app's API log format
+is not the default, Phase 2), `appError` (the app's error-dialog regex, Phase 2), `stoppedEarly`
+(`[{lang, step, remaining}]` when the user stopped a suite that exited 6 — shown under "Not
+checked"), `notes` (short facts a reader needs, e.g. "session expired once; re-ran
 TC-07 en").
 
 ## Build
@@ -31,6 +34,12 @@ $S/report_build.py --cases <story>/test-cases.md --results <runDir>/artifacts/re
 ```
 
 - Run `triage_check.py` first; do not build on a failing check (except an aborted run).
+- Verdict: FAIL (a Critical/High Bug), INCOMPLETE (any in-scope pair blocked or not run: its
+  expected result was never checked; the verdict names the findings that blocked them),
+  PASS WITH ISSUES, PASS. Top issues are the three most severe findings of any class except
+  Flaky and Test error.
+- The script refuses a report that contains a value from `test-data.local.json`; real test data
+  is referred to by key (the Test data table shows "not in git").
 - **Aborted run** (any stop after Phase 3: device lost, user stops, build fails): build with
   `--aborted "<reason>"` from whatever exists — missing files are treated as empty. Hard rule 13.
 - The script refuses to write a report containing a bearer token, JWT or config secret. Fix the

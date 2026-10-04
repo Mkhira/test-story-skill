@@ -63,7 +63,8 @@ Choices: `message checks only`, `all cases`, `skip English`.
 1. **Platform:** iOS simulator or Android emulator.
 2. **Test data:** one question per value the cases need. Real identifiers (IDs, phone numbers,
    accounts) are never invented: type them in, skip the cases that need them, or leave them for
-   later. For "invalid" values the skill offers obviously fake ones.
+   later. What you type is saved in `test-data.local.json` next to the test cases (git-ignored),
+   never in a committed file. For "invalid" values the skill offers obviously fake ones.
 3. **Choices:** whether to add `testID` props to the feature's elements (recommended: it makes
    the tests stable in both languages; the question says exactly which files change), and whether
    to run cases that send real SMS / email or create records.
@@ -101,15 +102,29 @@ After the developers fix the reported problems:
    | Case  | Language | Before | Now                    |
    | TC-11 | en       | BUG-04 | fixed                  |
    | TC-18 | ar       | BUG-02 | still failing — BUG-02 |
-   2 of 20 pairs fixed.
+   | TC-26 | ar       | BUG-03 | blocked — check not reached |
+   1 of 20 pairs fixed · 1 still failing · 1 not verified
    ```
+
+   **Blocked — check not reached** means the case stopped before its check (for example the
+   contact-verification step broke), so the fix is not verified yet. Blocked pairs come back in
+   the next retest.
 
 A retest of a retest works the same way. Retest reads the previous run from `test-runs/`, which
 lives only on the machine that ran it.
 
 ## Reading the report
 
-`test-report-<runId>.md` opens with a verdict (PASS, PASS WITH ISSUES, FAIL) and the top issues.
+`test-report-<runId>.md` opens with a verdict and the top issues (the three most severe findings
+of any kind):
+
+| Verdict | Means |
+| --- | --- |
+| FAIL | a Critical or High bug |
+| INCOMPLETE | some cases never reached their check (a shared step or the server broke); the verdict names what blocked them |
+| PASS WITH ISSUES | everything was checked; there are lower-severity findings |
+| PASS | everything was checked and passed |
+
 Then: run information, bugs, content issues, gaps, design deviations, test data and environment
 issues, flaky tests, test errors, manual checks for you, findings outside the feature, a
 coverage matrix (acceptance criterion → cases → result per language) and an appendix.
@@ -130,14 +145,15 @@ problem), the API call when relevant, the code location, and 2–3 fix options.
 
 ## What to commit
 
-Commit `test-cases.md` and `test-report-<runId>.md`. The skill never commits or pushes.
+Commit `test-cases.md`, `test-report-<runId>.md` and the `e2e/` flows (so teammates can re-run
+them; the skill notices hand edits). The skill never commits or pushes.
 
-`e2e/` (Maestro flows) and `test-runs/` (screenshots and run data) are git-ignored; the skill
-adds these entries to `.gitignore` before writing:
+`test-runs/` (screenshots and run data) and `test-data.local.json` (your real test values) are
+git-ignored; the skill adds these entries to `.gitignore` before writing:
 
 ```gitignore
 test-runs/
-**/test-stories/*/e2e/
+test-data.local.json
 ```
 
 ## Tips
@@ -157,3 +173,8 @@ test-runs/
 | The login screen appears mid-run | the session expired: log in again; the skill re-runs that case |
 | Another app keeps coming to the front | the skill closes other apps before each case; uninstall the app if it still happens |
 | Maestro or Java missing | accept the install offer, or install them yourself and run again |
+| "Run stopped early: blocked" | two cases in a row stopped at the same step; the skill shows the step and what the app or server answered. Stop and report, or fix it and let the run continue |
+| Cases marked "blocked" in the report | they never reached their check; fix the blocking step and retest |
+| "Lint failed" before the run | a flow lacks an `EXPECT` label, uses an unknown data key or does not parse; the skill fixes the flow and continues |
+| "Shared step failed" before the cases | the deep smoke found a broken step many cases need; choose to run only the other cases, fix it, or stop and report |
+| A run finished but has no report (terminal closed) | run the same command again: the skill offers to write that run's report first |

@@ -172,6 +172,39 @@ def finding_md(f, root):
     return '\n'.join(lines)
 
 
+def blocked(r):
+    """The attempt stopped before the case's EXPECT check (flow / app / timeout): its expected
+    result was never checked, so it is neither a pass nor a confirmed failure. Records written
+    before failKind existed count as plain failures."""
+    return r['status'] != 'passed' and 'failKind' in r and r['failKind'] != 'check'
+
+
+def step_of(r):
+    fc = r.get('failedCommand') or {}
+    return (fc.get('message') or r.get('error') or '?')[:140]
+
+
+def blocked_lines(runs, fin, info):
+    """Summary note: which pairs never reached their check, grouped by the step that stopped them."""
+    by, errs = defaultdict(list), defaultdict(list)
+    for k in runs:
+        if k in fin and blocked(fin[k][-1]):
+            r = fin[k][-1]
+            g = (r['failKind'], step_of(r))
+            by[g].append(f'{k[0]} {k[1]}')
+            if r.get('appError') and r['appError'] not in errs[g]:
+                errs[g].append(r['appError'])
+    out = []
+    for (kind, step), pairs in by.items():
+        why = ' — the app showed ' + ' / '.join(f'"{e}"' for e in errs[(kind, step)]) if errs[(kind, step)] else ''
+        out.append(f'- **Blocked ({kind}):** {", ".join(pairs)} stopped at `{step}`{why}. '
+                   'Expected results not checked.')
+    for st in info.get('stoppedEarly') or []:
+        out.append(f"- **Stopped early ({st.get('lang', '?')}):** {', '.join(st.get('remaining') or [])} not run — "
+                   f"the cases before them all stopped at `{st.get('step', '?')}`.")
+    return (['**Not checked**', ''] + out + ['']) if out else []
+
+
 def failed_any(runs, fin):
     return any(k in fin and fin[k][-1]['status'] != 'passed' for k in runs)
 
@@ -192,15 +225,27 @@ def retest_table(a, info, runs, fin, findings):
     before = covered(json.load(open(prev)).get('findings', [])) if prev.exists() else {}
     now = covered(findings)
     out = [f'### Retest of run `{prev_id}`', '', '| Case | Language | Before | Now |', '| --- | --- | --- | --- |']
-    fixed = 0
+    tally = Counter()
     for k in runs:
         r = fin.get(k)
-        state = 'not run' if not r else ('**fixed**' if r[-1]['status'] == 'passed' else 'still failing')
-        fixed += state == '**fixed**'
+        if not r:
+            state = 'not run'
+        elif r[-1]['status'] == 'passed':
+            state = '**fixed**'
+        elif blocked(r[-1]):
+            # the fix is unverified: the case never got to the check that failed before
+            state = 'blocked — check not reached'
+        else:
+            state = 'still failing'
+        tally[state] += 1
         b = ', '.join(before.get(k, [])) or 'failed'
         n = state if state != 'still failing' else state + (' — ' + ', '.join(now[k]) if now.get(k) else '')
         out.append(f'| {k[0]} | {k[1]} | {b} | {n} |')
-    out += ['', f'{fixed} of {len(runs)} pairs fixed.', '']
+    line = f"{tally['**fixed**']} of {len(runs)} pairs fixed · {tally['still failing']} still failing"
+    if tally['blocked — check not reached'] or tally['not run']:
+        line += (f" · {tally['blocked — check not reached'] + tally['not run']} not verified "
+                 '(blocked or not run: retest them once the blocking step works)')
+    out += ['', line + '.', '']
     return out
 
 
@@ -234,7 +279,9 @@ def build(a):
     info = json.load(open(a.run_info)) if Path(a.run_info).exists() else {}
     findings = sorted(triage.get('findings', []), key=sev_rank)
     # Steps to reproduce default to the case's steps with the entered test data filled in.
-    values = {r[0].strip('`'): r[2] for r in data_rows if len(r) > 2 and '{{' not in r[2]}
+    # `local` values live in git-ignored test-data.local.json and never reach the report
+    values = {r[0].strip('`'): ('not in git' if r[2].strip('`').lower() == 'local' else r[2])
+              for r in data_rows if len(r) > 2 and '{{' not in r[2]}
     for f in findings:
         first_case = str(f.get('case', '')).split(',')[0].strip()
         c = next((x for x in cases if x['id'] == first_case), None)
@@ -264,16 +311,24 @@ def build(a):
     skipped_pairs = [k for k in auto_runs if k in user_skipped]
     auto_runs = [k for k in auto_runs if k not in user_skipped]
     not_run = [k for k in auto_runs if k not in fin]
+    # pairs whose expected result was never checked: a run cannot pass on them
+    unchecked = [k for k in auto_runs if k not in fin or blocked(fin[k][-1])]
+    blockers = sorted({fid for k in unchecked for fid in covered(findings).get(k, [])})
+    gap = (f'{len(unchecked)} of {len(auto_runs)} pairs not checked'
+           + (f" (blocked by {', '.join(blockers)})" if blockers else ''))
     if a.aborted:
         verdict = f'ABORTED — {a.aborted}'
     elif worst <= 1:
-        verdict = 'FAIL — the story has Critical/High bugs'
-    elif findings or not_run or (scope and failed_any(auto_runs, fin)):
+        verdict = 'FAIL — the story has Critical/High bugs' + (f'; {gap}' if unchecked else '')
+    elif unchecked:
+        verdict = f'INCOMPLETE — {gap}'
+    elif findings or (scope and failed_any(auto_runs, fin)):
         verdict = 'PASS WITH ISSUES'
     else:
         verdict = 'PASS'
     passed = sum(1 for k in auto_runs if k in fin and fin[k][-1]['status'] == 'passed')
-    failed = sum(1 for k in auto_runs if k in fin and fin[k][-1]['status'] != 'passed')
+    n_blocked = sum(1 for k in auto_runs if k in fin and blocked(fin[k][-1]))
+    failed = sum(1 for k in auto_runs if k in fin and fin[k][-1]['status'] != 'passed') - n_blocked
 
     out = [f"# Test report – {info.get('feature', '')} – {info.get('storyTitle') or title_line.split('–')[-1].strip()}", '']
     out.append(f"Run `{info.get('runId', '?')}` · {info.get('platform', '?')} · Env: {info.get('env', '?')}"
@@ -288,7 +343,9 @@ def build(a):
 
     # 1. Summary
     out += ['## 1. Summary', '', f'**Verdict:** {verdict}', '',
-            f'Automated runs: {passed} passed · {failed} failed · {len(not_run)} not run '
+            f'Automated runs: {passed} passed · {failed} failed · '
+            + (f'{n_blocked} blocked (check not reached) · ' if n_blocked else '')
+            + f'{len(not_run)} not run '
             + (f'· {len(skipped_pairs)} skipped by you ' if skipped_pairs else '')
             + (f"(retest of run `{info.get('retestOf', '?')}`: the {len(auto_runs)} case × language pairs that failed there) · "
                if scope else f'(of {len(auto_runs) + len(skipped_pairs)} = {(len(auto_runs) + len(skipped_pairs)) // 2} cases × ar/en) · ') +
@@ -302,12 +359,15 @@ def build(a):
             row = [counts.get((c, s), 0) for s in SEV]
             out.append(f'| {c} | ' + ' | '.join(str(x) for x in row) + f' | {sum(row)} |')
         out.append('')
-    top = [f for f in findings if f['classification'] in ('Bug', 'Content issue', 'Spec gap', 'Design deviation')][:3] or findings[:3]
+    # by severity across classes: a High environment blocker outranks a Low spec gap
+    top = [f for f in findings if f['classification'] not in ('Flaky', 'Test error', 'Test error (expectation)')][:3] \
+        or findings[:3]
     if top:
         out.append('**Top issues**')
         out += [f"{i}. {f['id']} ({f.get('severity', '—')}, {f['classification']}): {f['title']}" for i, f in enumerate(top, 1)]
         out.append('')
 
+    out += blocked_lines(auto_runs, fin, info)
     if scope:
         out += retest_table(a, info, auto_runs, fin, findings)
 
@@ -327,7 +387,7 @@ def build(a):
             f"| Figma | {info.get('figma', 'not run')} |", '']
     if data_rows:
         out += ['**Test data used**', '', '| Key | Meaning | Value | Used by |', '| --- | --- | --- | --- |']
-        out += [f'| {r[0]} | {r[1] if len(r) > 1 else ""} | {r[2] if len(r) > 2 else ""} | {r[3] if len(r) > 3 else ""} |' for r in data_rows]
+        out += [f'| {r[0]} | {r[1] if len(r) > 1 else ""} | {values.get(r[0].strip("`"), r[2] if len(r) > 2 else "")} | {r[3] if len(r) > 3 else ""} |' for r in data_rows]
         out.append('')
     out += ['**Production changes made by the run** (testID props and pass-throughs only)', '']
     if ids or pts:
@@ -430,7 +490,9 @@ def build(a):
             return '–'
         if not r:
             return 'not run'
-        return 'pass' if r[-1]['status'] == 'passed' else 'FAIL'
+        if r[-1]['status'] == 'passed':
+            return 'pass'
+        return 'BLOCKED' if blocked(r[-1]) else 'FAIL'
     out += ['## 13. Coverage matrix', '']
     if scope:
         out += ['`–` = not part of this retest (see the previous report).', '']
@@ -485,5 +547,12 @@ if __name__ == '__main__':
     if leak:
         raise SystemExit(json.dumps({'error': 'possible secret in report; mask it in triage.json and rebuild',
                                      'match': leak.group(0)[:24] + '…'}))
+    # real test data (test-data.local.json) must not reach a committed report
+    local_file = Path(a.cases).parent / 'test-data.local.json'
+    local = json.loads(local_file.read_text(encoding='utf-8')) if local_file.exists() else {}
+    hits = [k for k, v in local.items() if len(str(v)) >= 4 and str(v) in text]
+    if hits:
+        raise SystemExit(json.dumps({'error': 'real test data in report; refer to it by key in triage.json and rebuild',
+                                     'keys': hits}))
     Path(a.out).write_text(text, encoding='utf-8')
     print(json.dumps({'out': a.out, 'lines': text.count('\n') + 1}))

@@ -5,28 +5,40 @@ but only when the user asks.)
 
   run_suite.py --run <runDir> --e2e <story>/e2e --lang en --device <id> --platform ios --app <appId>
                --cases TC-01,TC-02 [--data <runDir>/artifacts/data.json] [--setup]
-               [--login-marker REGEX] [--no-retry] [--timeout SEC]
+               [--login-marker REGEX] [--app-error REGEX] [--no-retry] [--timeout SEC]
 
 --setup         run subflows/set-language-<lang>.yaml first (--no-record); failure stops the suite.
 --login-marker  a regex that only the login screen shows; a failure whose hierarchy matches it
                 stops the suite (session expired → the agent runs assisted login, re-runs that
                 case with run_flow.sh --attempt N+1, then starts the suite again).
+--app-error     the app's error-dialog texts, passed to run_flow.sh (failKind app: not retried).
 --no-retry      never retry (default: retry once when failKind is flow or timeout; a failed
-                "EXPECT …" check is deterministic and is not retried).
+                "EXPECT …" check or an app error is deterministic and is not retried).
+
+Order: cases that go through the same subflows run next to each other (stable: id order inside
+a group), so a broken shared step shows up in consecutive cases.
+Fail fast: when two cases in a row stop on the same step before their check (same failing
+command and message, failKind flow / app / timeout), the step is shared (a subflow, the app, the
+server) and every later case would stop there too. The suite stops with exit 6 and lists the
+remaining cases; they get no record, so a resume after the cause is fixed runs them.
 
 Resume: a (case, lang) that already has a record in results.json is skipped.
 Before every attempt, other third-party apps on the device are terminated (an app left in the
 foreground stole focus and spoiled failure screenshots in the first real run).
-Prints one JSON line per attempt, then a summary line. Exit 0 done, 4 setup failed, 5 login needed.
+Prints one JSON line per attempt, then a summary line. Exit 0 done, 4 setup failed, 5 login needed,
+6 blocked (fail fast above).
 """
 import argparse
 import json
 import re
 import subprocess
+import sys
 import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+from flow_sync import subflows_of  # noqa: E402
 
 
 def other_apps(platform, device, app):
@@ -64,6 +76,13 @@ def flow_for(e2e, case):
     return hits[0] if hits else None
 
 
+def grouped(cases, e2e):
+    def key(case):
+        flow = flow_for(e2e, case)
+        return tuple(sorted(p.name for p in subflows_of(flow))) if flow else ()
+    return sorted(cases, key=key)
+
+
 def done_pairs(results):
     p = Path(results)
     if not p.exists() or not p.stat().st_size:
@@ -76,6 +95,8 @@ def run_flow(a, flow, case, attempt, record=True):
            '--attempt', str(attempt), '--timeout', str(a.timeout)]
     if a.data:
         cmd += ['--data', a.data]
+    if a.app_error:
+        cmd += ['--app-error', a.app_error]
     if not record:
         cmd.append('--no-record')
     t0 = time.time()
@@ -83,6 +104,14 @@ def run_flow(a, flow, case, attempt, record=True):
     rec = last_json(out.stdout)
     rec['_sec'] = round(time.time() - t0)
     return rec
+
+
+def blocker(rec):
+    """What a failure that stopped before the case's check looks like; None when the check ran."""
+    if rec.get('status') == 'passed' or rec.get('failKind') == 'check':
+        return None
+    fc = rec.get('failedCommand') or {}
+    return (rec.get('failKind'), fc.get('type', ''), (fc.get('message') or rec.get('error') or '')[:200])
 
 
 def emit(**kw):
@@ -96,6 +125,7 @@ def main():
     ap.add_argument('--data', default='')
     ap.add_argument('--setup', action='store_true')
     ap.add_argument('--login-marker', default='')
+    ap.add_argument('--app-error', default='')
     ap.add_argument('--no-retry', action='store_true')
     ap.add_argument('--timeout', type=int, default=600)
     a = ap.parse_args()
@@ -114,7 +144,9 @@ def main():
             raise SystemExit(4)
 
     done = done_pairs(results)
-    for case in [c for c in a.cases.split(',') if c]:
+    cases = grouped([c for c in a.cases.split(',') if c], a.e2e)
+    prev = None  # (case, blocker) of the previous case's final attempt
+    for i, case in enumerate(cases):
         if (case, a.lang) in done:
             summary['skipped'] += 1
             continue
@@ -131,17 +163,26 @@ def main():
                  failKind=rec.get('failKind'), error=(rec.get('error') or '')[:160], sec=rec['_sec'])
             if rec.get('status') == 'passed':
                 summary['passed'] += 1
+                prev = None
                 break
             hier = rec.get('failureHierarchy')
             if a.login_marker and hier and Path(hier).exists() and \
                     re.search(a.login_marker, Path(hier).read_text(encoding='utf-8', errors='replace')):
                 emit(**summary, stopped='login-required', case=case, attempt=attempt)
                 raise SystemExit(5)
+            sig = blocker(rec)
+            if sig and prev and prev[1] == sig:
+                summary['failed'] += 1
+                summary['minutes'] = round((time.time() - t_start) / 60, 1)
+                emit(**summary, stopped='blocked', failKind=sig[0], step=sig[2], cases=[prev[0], case],
+                     remaining=cases[i + 1:])
+                raise SystemExit(6)
             if attempt == 1 and not a.no_retry and rec.get('failKind') in ('flow', 'timeout'):
                 attempt = 2
                 summary['retried'] += 1
                 continue
             summary['failed'] += 1
+            prev = (case, sig)
             break
     summary['minutes'] = round((time.time() - t_start) / 60, 1)
     emit(**summary)

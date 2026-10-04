@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # device.sh <ios|android> <device name|udid|avd|""> <appId>
 # Boots the device when needed. Prints JSON {platform, deviceId, name, booted, appInstalled, appRunning}.
-# Empty device name → an already booted device, else the first available iPhone / AVD.
+# Empty device name → an already booted device, else the most recently booted iPhone / the first AVD.
 set -u
 PLATFORM="$1"; WANT="${2:-}"; APP="$3"
 SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Library/Android/sdk}}"
@@ -14,7 +14,9 @@ if [ "$PLATFORM" = "ios" ]; then
 import json,sys
 want=sys.argv[1]; d=json.load(sys.stdin)["devices"]
 devs=[x for v in d.values() for x in v if "iPhone" in x["name"]]
-m=[x for x in devs if want and want in (x["udid"],x["name"])] or [x for x in devs if not want and x["state"]=="Booted"] or ([] if want else devs[-1:])
+# nothing booted: the most recently used iPhone (it is the one that has the dev build), else the last listed
+recent=sorted([x for x in devs if x.get("lastBootedAt")], key=lambda x: x["lastBootedAt"])
+m=[x for x in devs if want and want in (x["udid"],x["name"])] or [x for x in devs if not want and x["state"]=="Booted"] or ([] if want else (recent or devs)[-1:])
 print(m[0]["udid"]+"\t"+m[0]["name"]+"\t"+m[0]["state"] if m else "")' "$WANT")
   [ -z "$pick" ] && { echo "{\"error\":\"no simulator matches '$WANT'\"}"; exit 1; }
   UDID=$(echo "$pick" | cut -f1); NAME=$(echo "$pick" | cut -f2); STATE=$(echo "$pick" | cut -f3)

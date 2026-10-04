@@ -41,12 +41,22 @@ a wrong expected text becomes a Test error (expectation) after an hour of runnin
 ## Beyond the story (always proposed; the user may skip)
 
 - Accessibility labels on interactive elements; touch targets ≥ 44 pt (iOS) / 48 dp (Android).
-- No network (airplane mode) on the main action.
+- No network (airplane mode) on the main action — Manual on iOS (Maestro's `setAirplaneMode` is
+  Android only; the iOS simulator has no airplane switch), Auto on Android.
 - Double tap on submit / primary action → one request only.
 - Back navigation mid-flow and after success.
 - Keyboard covering the focused input or the primary button.
 - App sent to background and brought back during loading and mid-form.
-- Dark mode rendering of the feature's screens.
+- Dark mode rendering of the feature's screens — the agent switches the device before the case
+  (`xcrun simctl ui <udid> appearance dark` / `adb shell cmd uimode night yes`) and back after;
+  a flow cannot. Mark it `needs-dark-mode` in Tags and run it after the suite like
+  `cleanStateLast`, or Manual.
+
+## OTP and other codes sent to a person
+
+Automate a step that needs a code (SMS / email OTP) only when the test environment has a fixed
+code the user gives as test data (e.g. a static staging OTP). Otherwise the case is Manual, or
+the user types the code during an assisted pause; never read a real person's messages.
 
 ## Mode, type, priority, tags
 
@@ -66,8 +76,17 @@ one, and then the case quotes the story sentence.
 ## Test data
 
 Every identifier is a placeholder `{{KEY}}` in the Test data table with its meaning and the
-cases that use it. Values are real test-environment data the user fills in. Generic free text
-(e.g. "abc", "مرحبا") may be written directly into steps.
+cases that use it (list every case, or a range "TC-09 … TC-15"). Synthetic values that only
+break a rule go in the Value column. Real test-environment values go in the git-ignored
+`<story>/test-data.local.json` and the Value column says `local`. A value that differs per
+language: `KEY_AR` and `KEY_EN` rows, used in flows as `${KEY}`. Generic free text (e.g. "abc",
+"مرحبا") may be written directly into steps.
+
+## Checks in flows
+
+Every assertion of an expected result carries `label: "EXPECT …"` — including "is visible",
+"is disabled" and "is not visible" checks, and the wait that is itself the check (the code sheet
+opens). Navigation and setup waits never do. `flow_sync.py lint` refuses a case flow without one.
 
 ## Case IDs
 
