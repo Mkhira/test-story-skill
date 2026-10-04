@@ -1,6 +1,6 @@
 # Maestro flows (Phase 5)
 
-Proven on Maestro 2.11.0, iOS 26.2 simulator, ZATCA Expo dev build (30 Sep 2026).
+Proven on Maestro 2.11.0, iOS 26.2 simulator, an Expo dev build (30 Sep 2026).
 
 ## Layout
 
@@ -85,7 +85,7 @@ both apps share one Metro and append to the same `results.json` under a lock.
 | `Parsing Failed at …:7:50` | unquoted `${…}` containing `: ` | quote the whole value |
 | Assertion false but text is on screen | grouped accessibility text | `.*text.*` or testID |
 | Previous case's input still there | deep link reused the screen | cold start in `go-to-feature` |
-| Eastern digits typed as Western | app normalises digits (e.g. `useBaseInput`) | expect the normalised value |
+| Eastern digits typed as Western | app normalises digits (e.g. in a shared input) | expect the normalised value |
 | App switches to another app (or SpringBoard) during a long failing wait; failure capture shows the wrong app | iOS "◀ <other app>" back-link: the app was opened while another app was frontmost | terminate other running apps before each case (`xcrun simctl terminate booted <id>`); note it in run-info |
 | Tap on a button that becomes enabled after a pick does nothing | the CTA enables a moment later; the first tap is swallowed | `extendedWaitUntil: {visible: {text: …, enabled: true}}` then `tapOn: {text: …, retryTapIfNoChange: true}` |
 | Text tap lands on the label, not the input | form builder fields repeat the label as the input's accessibility text | `index: 2` when the placeholder equals the label (label, input, inner); otherwise tap the placeholder text; ambiguous radio/label/input trios → `point:` tap |

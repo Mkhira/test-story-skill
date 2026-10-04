@@ -30,7 +30,7 @@ a wrong expected text becomes a Test error (expectation) after an hour of runnin
 ## Bilingual checks (always)
 
 - Arabic letters in text inputs; Eastern Arabic digits (٠-٩) in numeric inputs (expect them
-  normalised to Western digits when the app does that, e.g. ZATCA `useBaseInput`).
+  normalised to Western digits when the app does that, e.g. in a shared base input).
 - Mixed Arabic letters + digits in free-text inputs.
 - RTL mirroring: back arrows, chevrons, row order, alignment, icons that carry direction.
 - Long Arabic text: labels and values that wrap or truncate.

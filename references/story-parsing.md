@@ -7,7 +7,7 @@ SPEC-GAP question. Never fill a gap with a guess.
 
 | Part | Look for | Example |
 | --- | --- | --- |
-| Role | "As a…", who is logged in, account type | individual taxpayer, establishment |
+| Role | "As a…", who is logged in, account type | individual user, business account |
 | Screens | named screens, steps, tabs | "search screen", "details page" |
 | Inputs | fields, their type and format | TIN (10 digits), date, attachment |
 | Validation | required, length, format, ranges, cross-field rules | "TIN must start with 3" |

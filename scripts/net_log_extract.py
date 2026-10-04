@@ -8,14 +8,14 @@
 Prints JSON {window, calls:[{time, dir, method, url, status, meta, body}], errors:[…], count}.
 - A line belongs to the window by its own ISO timestamp; lines without one (LogBox errors, stack
   traces) are kept when they sit between two in-window lines.
-- Requests look like "→ [DEV] GET https://…" and responses "← [DEV] 200 /v1/…" (ZATCA
-  LoggerService); other shapes are kept as raw lines under calls with dir "?". Another project's
+- Requests look like "→ [DEV] GET https://…" and responses "← [DEV] 200 /v1/…" (the default
+  format); other shapes are kept as raw lines under calls with dir "?". Another project's
   logger: pass its tag and --req-re (groups: method, url) / --res-re (groups: status, url) /
   --lang-field, as Phase 2 recorded them in run-info `network`.
 - Masking (hard rule 8) happens here, before anything reaches the agent's context:
   secrets/tokens are removed, PII values keep only their last 2 characters.
 - --lang (en and ar ran in parallel, so their windows overlap in the one Metro log): keeps the
-  requests whose meta says that language ("language":"EN"/"AR" in ZATCA) and the responses paired
+  requests whose meta says that language (e.g. "language":"EN"/"AR") and the responses paired
   with them (the oldest open request to the same path). A response whose open requests come from
   both languages is kept with "ambiguous": true; log errors cannot be attributed and are flagged
   "errorsMayMix": true. Ambiguous evidence for a Bug → re-run that case alone for a clean window.

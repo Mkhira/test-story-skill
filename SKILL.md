@@ -14,7 +14,7 @@ message checks only / skip) → `test-report-<runId>.md` in the same folder.
 `/test-story retest <story folder | feature>` (or the user says "retest") → **Retest mode** below:
 only the case × language pairs that failed in the latest run are run again.
 
-Build status: all phases are live and validated on a real feature (establishment-signup, iOS,
+Build status: all phases are live and validated on a real feature (a bilingual sign-up flow, iOS,
 en + ar): full run (M6, 2026-10-01), then M7 live in two retests (2026-10-01, 2026-10-04):
 Arabic first, EXPECT checks not retried, retest scope, run clean-up. M8 (2026-10-04: failKind
 `app`, fail fast on a shared blocking step, "blocked" pairs in the report, flows committed)
@@ -96,8 +96,11 @@ When the user says "retest" (after fixes), run ONLY what failed last time:
    `bundleIdentifier` and Android `package` (Maestro `appId`). Not Expo → stop and say so.
 2. **Platform:** ask with a multiple-choice question: iOS simulator or Android emulator (retest:
    reuse the previous run's platform, no question).
-3. **Project run skill:** look for a repo skill that runs the app (e.g. `.claude/skills/run-zatca/`).
-   When present, read it; device boot, build, Metro, deep links and Maestro facts follow it.
+3. **Project run skill:** look for a repo skill that runs the app (e.g. `.claude/skills/run-myapp/`).
+   When present, read it; device boot, build, Metro, deep links and Maestro facts follow it, and
+   so do the app facts Phase 2 needs (language switch, path to a feature, message sources, error
+   dialog, network log format, environment, logged-in marker). Project facts live there, never in
+   this skill. Phase 2 found one that the run skill lacks → offer to add it there.
 4. **Tools:** `$S/preflight.sh <platform>`. `installable` lists what the skill may install
    (`maestro`, `java17`): ask once, then re-run with `--install-maestro` / `--install-java`.
    `manual` lists what only the user can install (Xcode, SDK, AVD) → stop with those steps before
@@ -144,34 +147,34 @@ Read-only. No device.
 2. **Trace each AC** to file:line → `Implemented` / `Partial` / `Missing`.
 3. **Static gaps:** ACs with no code; behaviour the story never mentions; API errors with no UI
    handling; keys in en but not ar (and the reverse); hard-coded visible strings.
-4. **Language switch:** find how the app changes language and whether it reloads. Use the run
-   skill's facts when present (ZATCA: Menu tab → `العربية` / `English`, live text switch, native
-   RTL only after a cold relaunch, session kept). Backend messages follow `Accept-Language`, so
-   server texts are asserted per language. Unknown → ask once.
-5. **Path to the feature:** a deep link first (ZATCA: `zatca://service-flow/<serviceId>`, ids in
-   the services data / deep-link map), else the tap path from home. Note the feature element to
-   wait on after arrival.
+4. **Language switch:** find how the app changes language: where the control is, whether text
+   switches live or needs a reload, whether native RTL needs a cold relaunch, whether the session
+   survives. Find how the backend picks its language (usually `Accept-Language`); server texts are
+   then asserted per language. Run skill first; unknown → ask once.
+5. **Path to the feature:** a deep link first (the app's scheme and the route or id that opens the
+   feature, from the run skill or the linking config / deep-link map), else the tap path from
+   home. Note the feature element to wait on after arrival.
 6. **testID audit:** every element a case touches that has no `testID` → a row with a kebab-case id
    `<feature>-<screen>-<element>` in the repo's existing style. If the element is rendered by a
    shared component that does not forward `testID`, add a separate pass-through row for that
    component. Nothing is edited now.
 7. **Message map:** for every text a case will assert (validation, success, error), find its
    exact en and ar wording and source: app translation key (feature `translations/en.ts` /
-   `ar.ts`, global `en.json` / `ar.json`), CMS / service-message catalog key (ZATCA:
-   `core/localization/service-messages-localization/{en,ar}.json`, served by the BFF), or server
-   response (unknown until the run). Expected results quote these texts; never paraphrase. A
+   `ar.ts`, global `en.json` / `ar.json`), CMS / server-message catalog key (its local default and
+   the endpoint that overrides it at runtime), or server response (unknown until the run). Expected results quote these texts; never paraphrase. A
    story text that differs from the app's text is a static finding, asked as a spec gap.
-   Also note the app's generic error-dialog titles in en and ar (ZATCA: `errorTitle` "Something
-   went wrong" / "حدث خطأ") → run-info `appError` (a regex), passed to `run_suite.py --app-error`.
-8. **Network log format:** find how the app logs API calls to the console (ZATCA:
-   `LoggerService` `[HttpClient]` lines with `→ GET …` / `← 200 …` and a `"language"` field — the
-   `net_log_extract.py` defaults). Another format → run-info `network: {tag, reqRe, resRe,
+   Also note the app's generic error-dialog titles in en and ar (the translation key behind the
+   app's error popup) → run-info `appError` (a regex, e.g. `Something went wrong|<ar title>`),
+   passed to `run_suite.py --app-error`.
+8. **Network log format:** find how the app logs API calls to the console. `net_log_extract.py`
+   reads by default `[HttpClient]` lines with `→ <METHOD> <url>` / `← <status> <path>` and a
+   `"language"` field. Another format → run-info `network: {tag, reqRe, resRe,
    langField}` (regexes with groups method, url / status, url), passed to `net_log_extract.py`. No
    API logging at all → the gap "network calls not visible" (adding a logger is a code change: it
    is not the skill's to make).
-9. **Environment:** read which env the running build uses (env file, API base URL; ZATCA: the
-   `ConfigService` "Loaded configuration" log line or `.env` + `.env.development`). Shown at
-   approval and in the report; no gate.
+9. **Environment:** read which env the running build uses (the env files Expo loads, the API base
+   URL, a config log line at startup — mask secrets in it). Shown at approval and in the report;
+   no gate.
 
 ## Phase 3 – Test cases and approval
 

@@ -1,6 +1,6 @@
 # Expo device handling (Phases 0, 2, 4)
 
-A project run skill (e.g. `.claude/skills/run-zatca/`) overrides the generic steps here for
+A project run skill (e.g. `.claude/skills/run-myapp/`) overrides the generic steps here for
 booting, building, deep links and language. Read it first when it exists.
 
 ## Scripts (run from the project root; all print JSON)
@@ -42,20 +42,20 @@ stale-embedded-bundle trap. Every successful `--build` records the native finger
 ## Metro log
 
 - `run_app.sh` starts `CI=1 npx expo start` with all output in `<runDir>/artifacts/metro.log`.
-- In dev builds, JS `console.*` lines land there, e.g. ZATCA `LoggerService`:
+- In dev builds, JS `console.*` lines land there, e.g. a logger that prints:
   `DEBUG [" [2026-09-30T13:10:05.036Z] [HttpClient] [DEBUG] ", "→ [DEV] GET https://…", "{…}"]`
   and `"← [DEV] 200 /v1/…", "<body>"`. Timestamps are UTC; `run_flow.sh` records UTC start/end.
 - The first API call proves logging works: `grep -c HttpClient metro.log` > 0 after the smoke flow.
-- Config log lines can contain secrets (ZATCA ConfigService prints `clientSecret` and payment
-  keys). Never copy metro.log lines into a report without masking (hard rule 8).
+- Config log lines can contain secrets (a startup config dump may print client secrets and
+  payment keys). Never copy metro.log lines into a report without masking (hard rule 8).
 - Android logs also reach `adb logcat | grep ReactNativeJS`.
 
 ## Language
 
 Find the switch in code (i18n `changeLanguage`, a settings screen, a language card). Record:
 where the control is, whether text switches live, whether native RTL (`I18nManager.forceRTL`)
-needs a cold relaunch, whether the session survives. ZATCA: Menu tab → `العربية` / `English`;
-text switches live; RTL on next cold launch; session kept. Unknown → ask the user once.
+needs a cold relaunch, whether the session survives. The project run skill usually has it;
+unknown → ask the user once.
 
 The backend localises from `Accept-Language`; server texts in the report are judged in the run's
 language.
@@ -65,13 +65,15 @@ language.
 1. Screenshot (`xcrun simctl io <udid> screenshot` / `adb exec-out screencap -p`) and ask the user
    to log in on the device and reply when done.
 2. Poll `dump_hierarchy.sh … --find "<post-login marker>"` every ~10 s (each dump takes 5–30 s).
-   ZATCA marker: `^(بياناتي|My Information)$`; logged out the same tab reads `الحساب` / `Account`.
+   The marker is something only a logged-in session shows (e.g. a profile tab label in both
+   languages, `^(<ar label>|<en label>)$`); the project run skill usually names it.
 3. A screen asking for OTP or a choice → ask the user; never type credentials yourself.
 4. Proceed only once `found` is true.
 
 ## Clean state
 
-`clearState` + `clearKeychain` (iOS keychain keeps tokens). Proven to log ZATCA out.
+`clearState` + `clearKeychain` (iOS keychain keeps tokens). Proven to log an Expo app with a
+keychain-stored session out.
 
 ## Deep links
 
