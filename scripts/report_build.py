@@ -165,11 +165,35 @@ def finding_md(f, root):
             lines.append(f"  {i}. {'(Recommended) ' if o.get('recommended') else ''}{o['text']}")
     if f.get('retest'):
         lines.append('- Re-test: ' + ', '.join(f['retest']))
-    if 'verified' in f:
+    # verified: true = a verifier confirmed it, false = a verifier downgraded it, absent / null =
+    # no verifier ran (only Bug and Content issue candidates get one) — never call that "downgraded"
+    why = re.sub(r'^(downgraded|confirmed|not run)\s*[:—-]\s*', '', f.get('verifierReason') or '', flags=re.I)
+    if f.get('verified') is True or f.get('verified') is False:
         v = 'confirmed' if f['verified'] else 'downgraded'
-        why = re.sub(r'^(downgraded|confirmed)\s*[:—-]\s*', '', f.get('verifierReason') or '', flags=re.I)
         lines.append(f"- Independent check: {v}" + (f" — {why}" if why else ''))
+    elif why:
+        lines.append(f"- Independent check: not run (only Bug and Content issue candidates get one) — {why}")
     return '\n'.join(lines)
+
+
+def code_line(c):
+    """Branch and commit the run tested, and any uncommitted changes the app ran with (run_meta.py code)."""
+    if not c:
+        return 'not recorded'
+    head = f"`{c.get('branch') or '?'}` @ `{c.get('commit') or '?'}`"
+    n = c.get('uncommittedCount', 0)
+    if not n:
+        return head + ' · no uncommitted changes'
+    listed = ', '.join(f'`{p}`' for p in c.get('uncommitted', []))
+    more = n - len(c.get('uncommitted', []))
+    return head + f" · **plus {n} uncommitted change{'s' if n > 1 else ''}**: {listed}" + (f' (+{more} more)' if more > 0 else '')
+
+
+def skill_line(sk):
+    if not sk:
+        return 'not recorded'
+    return f"`{sk.get('commit') or 'no git'}`" + (' + local changes' if sk.get('dirty') else '') + \
+        f" · scripts `{sk.get('scriptsHash', '?')}`"
 
 
 def blocked(r):
@@ -378,9 +402,11 @@ def build(a):
             '| Item | Value |', '| --- | --- |',
             f"| Story | {info.get('story', '—')} |",
             f"| Feature | `{info.get('featurePath', '—')}` |",
+            f"| Code tested | {code_line(info.get('code'))} |",
             f"| Platform / device / OS | {info.get('platform', '—')} · {info.get('device', '—')} · {info.get('os', '—')} |",
             f"| Environment | {info.get('env', '—')} ({info.get('apiBase', '—')}) |",
             f"| Maestro | {info.get('maestro', '—')} |",
+            f"| test-story | {skill_line(info.get('skill'))} |",
             f"| Languages | {info.get('langChoice') or 'ar, en'} |",
             f"| Run duration | {fmt_dur(info.get('started', ''), info.get('finished', ''))} |",
             f"| Network log | {'captured' if info.get('networkLogVisible', True) else 'NOT visible (see Gaps)'} |",

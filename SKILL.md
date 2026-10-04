@@ -20,7 +20,11 @@ Arabic first, EXPECT checks not retried, retest scope, run clean-up. M8 (2026-10
 `app`, fail fast on a shared blocking step, "blocked" pairs in the report, flows committed)
 is verified offline against the 2026-10-04 run's data (its report was built live with the
 blocked rows). M9 (2026-10-05: flow lint, deep smoke, subflow-grouped order, INCOMPLETE verdict,
-local test data, masked metro.log) is verified offline. Not yet run on Android.
+local test data, masked metro.log) is verified offline. M10 (2026-10-05: build check against
+the native fingerprint, `verified` only for verifier-seen findings, documented `steps`) is
+verified offline on the 2026-10-04 run's data and the live device record. M11 (2026-10-05:
+"Code tested" and skill version in the report, skill-change guard exit 7, `run_app.sh --stop`)
+is verified offline plus a live `--stop`. Not yet run on Android.
 
 Scripts live in `scripts/` next to this file (`S=~/.claude/skills/test-story/scripts`). Run them
 from the project root; each prints JSON.
@@ -111,7 +115,9 @@ When the user says "retest" (after fixes), run ONLY what failed last time:
    later fields as they become known — see `references/report-rules.md`) and `.gitignore`:
    `git check-ignore -q <story>/test-runs/x`, then `git check-ignore -q
    <story>/test-data.local.json`; not ignored → add `test-runs/` / `test-data.local.json` before
-   writing either. Do not ignore `e2e/`: the flows are committed with the cases.
+   writing either. Do not ignore `e2e/`: the flows are committed with the cases. Then
+   `$S/run_meta.py skill --run <runDir>`: the skill's commit and scripts hash, which
+   `run_suite.py` checks before every case (exit 7 below).
 
 ## Phase 1 – Intake
 
@@ -230,19 +236,27 @@ Read `references/expo-device.md` (and the project run skill, if any).
    languages, Arabic first. (`clone_device.sh` can make a second device for a parallel English
    run, but only when the user asks for it: on a 16 GB Mac a second idle simulator alone pushed
    1.4 GB into swap.)
-3. **Metro + app:** `$S/run_app.sh <platform> <runDir> <appId> <deviceId>` (add `--build` after
-   testID edits only if native code changed — JS edits reach the app through Metro). Exit 3 → ask
-   to restart Metro, then `--restart-metro`; declined → record the gap and go on without network
-   triage.
-4. **Assisted login** (skip when the story's feature is pre-login): screenshot, ask the user to
+3. **Build check:** `$S/build_check.py <platform> <appId> <deviceId>` — does the installed build
+   match this checkout's native code? `install` non-empty → ask before installing (it changes the
+   user's node_modules), then check again; `rebuild: true` → build (`--build`, plus `--prebuild`
+   when `prebuild`); `rebuild: null` → no record yet, note it and go on. Details and the questions:
+   `references/expo-device.md` "Which build". Every retest runs this too: a branch switch between
+   runs is the usual cause.
+4. **Metro + app:** first `$S/run_meta.py code --run <runDir> --story <story>` (branch, commit and
+   the uncommitted changes the app is about to run with — the report's "Code tested" row, so a
+   retest of uncommitted fixes says so). Then `$S/run_app.sh <platform> <runDir> <appId> <deviceId>
+   [--build] [--prebuild]` (testID edits alone never need `--build` — JS edits reach the app through
+   Metro). Exit 3 → ask to restart Metro, then `--restart-metro`; declined → record the gap and go
+   on without network triage.
+5. **Assisted login** (skip when the story's feature is pre-login): screenshot, ask the user to
    log in, poll `$S/dump_hierarchy.sh <runDir> login-check <deviceId> --find "<marker>"`.
-5. **Network check:** after the smoke run, `grep -c "<api log tag>" metro.log` > 0, else record the
+6. **Network check:** after the smoke run, `grep -c "<api log tag>" metro.log` > 0, else record the
    gap "network calls not visible".
-6. **run-info.json:** add device, os, env, apiBase, maestro version, `started`,
+7. **run-info.json:** add device, os, env, apiBase, maestro version, `started`,
    testIdsAdded / passThroughs (file, line), networkLogVisible.
-7. **Smoke:** `$S/run_flow.sh <e2e>/subflows/go-to-feature.yaml ar <runDir> <deviceId> SMOKE
+8. **Smoke:** `$S/run_flow.sh <e2e>/subflows/go-to-feature.yaml ar <runDir> <deviceId> SMOKE
    --no-record`. Failing → fix the subflow (hierarchy dump to see the screen) before any case.
-8. **Deep smoke:** `$S/flow_sync.py smoke <test-cases.md> <e2e>` → the shared subflows that 3+
+9. **Deep smoke:** `$S/flow_sync.py smoke <test-cases.md> <e2e>` → the shared subflows that 3+
    cases go through (e.g. the contact verification step); run each once with `run_flow.sh … --data
    <runDir>/artifacts/data.json --no-record` (after Phase 5 steps 1–2 wrote the data). A failure
    here costs 2 minutes instead of several cases: the flow's fault → fix it; the app or server
@@ -290,6 +304,10 @@ Read `references/maestro.md`; start case flows from `templates/flow.template.yam
      it — wait, then continue". Stop → run-info `stoppedEarly: [{lang, step, remaining}]`; the
      blocking cause becomes one finding covering every blocked pair (Phase 6). Do not start the
      English suite while the same step blocks Arabic: ask first.
+   Exit 7 → **the skill changed**: the test-story scripts differ from the version recorded at the
+   start (another session edited the skill). Re-read this file and the references the remaining
+   phases use, tell the user in one line, then start the suite again with `--accept-skill-change`
+   (it records the new version and a note; resume runs only the remaining cases).
 4. **English: ask.** Show the Arabic results (case → passed / failed, one line per failure), then
    one AskUserQuestion. Get the message-check set first: `$S/flow_sync.py messages <test-cases.md>`
    → `cases` (Expected quotes a translated text) and `others`. Options:
@@ -375,6 +393,9 @@ Read `references/report-rules.md`.
    stopped early — any stop after Phase 3 still produces a report), then
    `$S/format_md.sh <story>/test-report-<runId>.md`.
 5. Read the report; fix wording at its source and rebuild; never hand-edit the report.
+5a. **Stop Metro:** `$S/run_app.sh <platform> <runDir> <appId> <deviceId> --stop` stops only the
+   Metro the skill started (the app stays installed). Skip it when the user asked to keep Metro or a
+   retest follows right away; one left running held port 8081 for three days.
 6. Tell the user the path, verdict, counts, top 3 issues and the run folder's size. Never commit
    (hard rule 12). Verdicts: FAIL (a Critical/High bug), INCOMPLETE (pairs blocked or not run —
    their expected results were never checked; named with the blocking finding), PASS WITH

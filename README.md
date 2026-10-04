@@ -103,7 +103,7 @@ flows with your project's Prettier when the project has one, so CI format checks
 | 1. Intake | story → acceptance criteria and spec gaps | — |
 | 2. Analyze | reads the code: implementation, translations, exact message texts, path to the feature | — |
 | 3. Test cases | writes `test-cases.md` and asks what it needs | answer, then approve |
-| 4. Prepare | adds approved testIDs, boots the device, starts Metro, smoke test | log in if the feature needs it |
+| 4. Prepare | adds approved testIDs, boots the device, checks the installed build matches your native code, starts Metro, smoke test | approve an install / rebuild if asked; log in if the feature needs it |
 | 5. Execute | runs Arabic, then the English you chose | choose English: message checks / all / skip |
 | 6. Triage | classifies every failure, gathers evidence, verifies bugs | — |
 | 7. Figma | compares screens with Figma frames | give Figma links when asked |
@@ -133,6 +133,9 @@ scripts/        deterministic helpers; each prints JSON
 - The newest additions (flow lint, trying shared steps first, grouping cases by shared steps,
   stopping early, local test data, masked logs) are tested against real run data, not yet in a
   live run.
+- Before every run the skill checks that the installed app matches your native code (packages,
+  config plugins, patches) and asks before installing or rebuilding.
+- Every report states the branch, commit and uncommitted changes it tested, and the skill version.
 - Android support is written but has not been run yet.
 
 ## License

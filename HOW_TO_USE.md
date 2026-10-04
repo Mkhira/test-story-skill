@@ -71,8 +71,11 @@ Choices: `message checks only`, `all cases`, `skip English`.
 4. **Spec gaps:** for each unclear story sentence that changes an expected result, pick the
    intended behaviour or keep it as a gap.
 5. **Approve:** "Approve and run", "I want to edit the file first", or "Stop here".
-6. **Log in** on the device when the feature needs a session; the skill waits and checks.
-7. **After the Arabic run:** English for message checks only (recommended), all cases, or skip.
+6. **Install / rebuild** only when the installed app does not match your code (after a branch
+   switch or a new native package): the skill shows what changed and asks before it runs the
+   install (it changes your `node_modules`) or a build (several minutes).
+7. **Log in** on the device when the feature needs a session; the skill waits and checks.
+8. **After the Arabic run:** English for message checks only (recommended), all cases, or skip.
 
 ## Arabic first, then English
 
@@ -177,4 +180,7 @@ test-data.local.json
 | Cases marked "blocked" in the report | they never reached their check; fix the blocking step and retest |
 | "Lint failed" before the run | a flow lacks an `EXPECT` label, uses an unknown data key or does not parse; the skill fixes the flow and continues |
 | "Shared step failed" before the cases | the deep smoke found a broken step many cases need; choose to run only the other cases, fix it, or stop and report |
+| "Installed build does not match" before the run | `node_modules` or the native code (packages, config plugins, `app.json`, patches) changed since the app was built: accept the install / rebuild, or the run tests an old build. The first time on a device the skill cannot compare yet; its next build records what it built |
+| "The skill changed during the run" | the skill's scripts were edited while it ran (for example by another Claude session); it re-reads its instructions and continues on the new version, and the report notes it |
+| Metro is gone after a run | the skill stops the Metro it started when the report is written; ask it to keep Metro running if you want to keep using it |
 | A run finished but has no report (terminal closed) | run the same command again: the skill offers to write that run's report first |

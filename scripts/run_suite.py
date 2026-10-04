@@ -6,12 +6,15 @@ but only when the user asks.)
   run_suite.py --run <runDir> --e2e <story>/e2e --lang en --device <id> --platform ios --app <appId>
                --cases TC-01,TC-02 [--data <runDir>/artifacts/data.json] [--setup]
                [--login-marker REGEX] [--app-error REGEX] [--no-retry] [--timeout SEC]
+               [--accept-skill-change]
 
 --setup         run subflows/set-language-<lang>.yaml first (--no-record); failure stops the suite.
 --login-marker  a regex that only the login screen shows; a failure whose hierarchy matches it
                 stops the suite (session expired → the agent runs assisted login, re-runs that
                 case with run_flow.sh --attempt N+1, then starts the suite again).
 --app-error     the app's error-dialog texts, passed to run_flow.sh (failKind app: not retried).
+--accept-skill-change  the skill's scripts changed since the run started (exit 7) and the agent
+                re-read SKILL.md: record the new version in run-info (with a note) and go on.
 --no-retry      never retry (default: retry once when failKind is flow or timeout; a failed
                 "EXPECT …" check or an app error is deterministic and is not retried).
 
@@ -25,8 +28,11 @@ remaining cases; they get no record, so a resume after the cause is fixed runs t
 Resume: a (case, lang) that already has a record in results.json is skipped.
 Before every attempt, other third-party apps on the device are terminated (an app left in the
 foreground stole focus and spoiled failure screenshots in the first real run).
+Skill guard: before every case the scripts are compared with the version run_meta.py recorded
+when the run started; changed → exit 7 (another session edited the skill mid-run once, and a
+half-written script killed a case).
 Prints one JSON line per attempt, then a summary line. Exit 0 done, 4 setup failed, 5 login needed,
-6 blocked (fail fast above).
+6 blocked (fail fast above), 7 skill scripts changed.
 """
 import argparse
 import json
@@ -39,6 +45,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from flow_sync import subflows_of  # noqa: E402
+import run_meta  # noqa: E402
 
 
 def other_apps(platform, device, app):
@@ -127,6 +134,7 @@ def main():
     ap.add_argument('--login-marker', default='')
     ap.add_argument('--app-error', default='')
     ap.add_argument('--no-retry', action='store_true')
+    ap.add_argument('--accept-skill-change', action='store_true')
     ap.add_argument('--timeout', type=int, default=600)
     a = ap.parse_args()
     t_start = time.time()
@@ -134,6 +142,14 @@ def main():
     apps = other_apps(a.platform, a.device, a.app)
     summary = {'summary': True, 'lang': a.lang, 'device': a.device, 'passed': 0, 'failed': 0,
                'retried': 0, 'skipped': 0, 'terminatedApps': apps}
+
+    if a.accept_skill_change and not run_meta.check(a.run)['ok']:
+        old = run_meta.check(a.run)['recorded']
+        info = run_meta.update_info(a.run, 'skill', run_meta.skill_state())
+        notes = info.get('notes') or []
+        notes.append(f"The test-story scripts changed during this run ({old} → {info['skill']['scriptsHash']}); "
+                     f"cases from {a.lang} onward ran on the new version.")
+        run_meta.update_info(a.run, 'notes', notes)
 
     if a.setup:
         terminate(a.platform, a.device, apps)
@@ -155,6 +171,12 @@ def main():
             emit(case=case, lang=a.lang, status='error', error='no flow file')
             summary['failed'] += 1
             continue
+        guard = run_meta.check(a.run)
+        if not guard['ok']:
+            summary['minutes'] = round((time.time() - t_start) / 60, 1)
+            emit(**summary, stopped='skill-changed', recorded=guard['recorded'], now=guard['now'],
+                 remaining=cases[i:])
+            raise SystemExit(7)
         attempt = 1
         while True:
             terminate(a.platform, a.device, apps)

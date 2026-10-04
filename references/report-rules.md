@@ -20,7 +20,9 @@ which language and why) and `skippedByUser` (`[{case, lang}]` the user chose not
 "skipped by you", not as "not run", and not held against the verdict), `testIdsAdded` and `passThroughs` (file,
 line, id / component, from Phase 4), `networkLogVisible`, `figma` (`"compared"` or
 `"not run: <reason>"`), `network` (`{tag, reqRe, resRe, langField}` when the app's API log format
-is not the default, Phase 2), `appError` (the app's error-dialog regex, Phase 2), `stoppedEarly`
+is not the default, Phase 2), `skill` (`run_meta.py skill`: commit, local changes, scripts hash —
+the report's "test-story" row), `code` (`run_meta.py code`: branch, commit, uncommitted changes —
+the "Code tested" row), `appError` (the app's error-dialog regex, Phase 2), `stoppedEarly`
 (`[{lang, step, remaining}]` when the user stopped a suite that exited 6 — shown under "Not
 checked"), `notes` (short facts a reader needs, e.g. "session expired once; re-ran
 TC-07 en").
@@ -55,6 +57,10 @@ only files that still exist. A reader without the screenshots must understand ev
   not "Assertion failed on details-card".
 - `expected`: the approved expected result, verbatim.
 - `actual`: what the screen showed, in words, including exact texts and numbers.
+- `steps` (optional): the report's "Steps to reproduce". Omitted → the first case in `case`
+  supplies them, so put the most telling case first or write `steps` (with data keys, not values).
+- `verified`: only for findings a verifier saw (true = confirmed, false = downgraded); leave it
+  out otherwise, never `false` for "not checked".
 - `evidence.network`: `METHOD /path → status` plus only the fields that prove the point, already
   masked (`net_log_extract.py` output). `"none"` when no call applies.
 - `code`: repo-relative `path:line`, the line that causes the behaviour when found.

@@ -111,7 +111,11 @@ Answer with JSON only:
  "severity": "Critical" | "High" | "Medium" | "Low" | null}
 ```
 
-Record `verified: true|false` and the verifier's reason in the finding.
+Record `verified: true` (CONFIRMED) or `false` (DOWNGRADED) and the verifier's reason in the
+finding. A finding no verifier saw (an Environment issue, Test data issue, Test error, Flaky,
+Design deviation, a Spec gap found directly) leaves `verified` out: the report then shows no
+"Independent check" line, or "not run" with the `verifierReason` when one is given. `false`
+always means a verifier downgraded the candidate.
 
 ## triage.json
 
@@ -133,8 +137,13 @@ Record `verified: true|false` and the verifier's reason in the finding.
 ```
 
 Optional fields: `"scope": "outside"` for a failure caused by code outside the story's feature
-(reported only in "Outside feature scope", with the owning folder in `code`), and
-`"beyondStory": "<rule>"` for findings from beyond-the-story cases (e.g. "double tap on submit").
+(reported only in "Outside feature scope", with the owning folder in `code`),
+`"beyondStory": "<rule>"` for findings from beyond-the-story cases (e.g. "double tap on submit"),
+and `"steps": "<steps to reproduce>"`. Without `steps` the report copies the steps of the FIRST
+case in `case` (preconditions and entered data filled in). So list the case that shows the
+problem best first, or set `steps` when no single case does — e.g. pairs blocked at a shared step:
+the steps that reach that step, not the steps of the case's own check (2026-10-04: an OTP outage
+showed the CR steps of TC-18 until TC-26, the mobile-verify case, was put first).
 
 IDs by classification: `BUG-nn`, `GAP-nn` (spec gap), `TD-nn` (test data), `ENV-nn`,
 `FLAKY-nn`, `TE-nn` (test error), `DD-nn` (design deviation, Phase 7). One finding may cover the

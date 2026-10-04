@@ -9,7 +9,9 @@ Prints JSON {ok, problems:[…], unclassified:[…]}; exit 1 when not ok.
 - Every finding: classification, severity, title, expected, actual, evidence.screenshot,
   2–3 fixOptions with exactly one recommended, retest.
 - Bugs: an AC (or "beyond-story:<rule>"), verified is true/false with a verifierReason, and
-  evidence.network or an explicit "none" (hard rule 7).
+  evidence.network or an explicit "none" (hard rule 7). Content issues: verified the same way.
+- Any other class: verified absent or null (no verifier ran); false is reserved for a candidate a
+  verifier downgraded, and then the verifierReason says so.
 - A blocked pair (final failKind flow / app / timeout: the check was never reached) must be
   covered by the finding for its blocking step, not by a check finding carried over from an
   earlier run: Content issue / Spec gap / Design deviation there is a problem; a Bug there is a
@@ -84,6 +86,11 @@ def main(results_path, triage_path):
             problems.append(f'{fid}: needs 2–3 fixOptions, has {len(opts)}')
         if sum(1 for o in opts if o.get('recommended')) != 1:
             problems.append(f'{fid}: exactly one fix option must be recommended')
+        if f.get('classification') == 'Content issue' and (f.get('verified') is None or not f.get('verifierReason')):
+            problems.append(f'{fid}: Content issue not independently verified')
+        if (f.get('classification') not in ('Bug', 'Content issue') and f.get('verified') is not None
+                and not f.get('verifierReason')):
+            problems.append(f'{fid}: verified is set but no verifierReason (omit verified when no verifier ran)')
         if f.get('classification') == 'Bug':
             if not f.get('ac'):
                 problems.append(f'{fid}: Bug without an AC')
